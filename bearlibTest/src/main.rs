@@ -14,6 +14,33 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
+struct Material {
+    Name: String,
+    Toughness: i32,
+    Boiling_Point: i32,
+    Melting_Point: i32,
+    Ignition_Point: i32,
+    Density: i32,
+    Freezing_Point: i32,
+}
+
+impl Material {
+    fn new(&mut self, name: String, toughness: i32, boiling: i32, melting: i32, ignition: i32, density: i32, freeze: i32) {
+        self.Name = name;
+        self.Toughness = toughness;
+        self.Boiling_Point = boiling;
+        self.Melting_Point = melting;
+        self.Ignition_Point = ignition;
+        self.Density = density;
+        self.Freezing_Point = freeze;
+    }
+}
+
+enum Materials {
+    steel(),
+    wood()
+}
+
 #[derive(Copy, Clone)]
 enum DoorState {
     Open,
