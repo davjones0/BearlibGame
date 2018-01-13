@@ -3,7 +3,7 @@ authors = ["davjones0"]
 name = "bearlibTest"
 version = "0.1.0"
 [dependencies]
-bear-lib-terminal = { path= "../BearLibTerminal.rs"}
+bear-lib-terminal = { path= "./BearLibTerminal.rs"}
 priority-queue = "*"
 calx-ecs = "*"
 serde = "*"

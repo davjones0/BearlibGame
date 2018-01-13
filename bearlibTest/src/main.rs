@@ -14,31 +14,11 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
-struct Material {
-    Name: String,
-    Toughness: i32,
-    Boiling_Point: i32,
-    Melting_Point: i32,
-    Ignition_Point: i32,
-    Density: i32,
-    Freezing_Point: i32,
-}
+mod materials;
 
-impl Material {
-    fn new(&mut self, name: String, toughness: i32, boiling: i32, melting: i32, ignition: i32, density: i32, freeze: i32) {
-        self.Name = name;
-        self.Toughness = toughness;
-        self.Boiling_Point = boiling;
-        self.Melting_Point = melting;
-        self.Ignition_Point = ignition;
-        self.Density = density;
-        self.Freezing_Point = freeze;
-    }
-}
-
-enum Materials {
-    steel(),
-    wood()
+#[derive(Copy, Clone)]
+pub enum Materials {
+    Steel,
 }
 
 #[derive(Copy, Clone)]
@@ -77,6 +57,8 @@ struct World {
     tile: HashMap<EntityId, TileType>,
     icon: HashMap<EntityId, String>,
     control: HashMap<EntityId, Control>,
+    material: HashMap<EntityId, Materials>,
+    pointer: HashMap<EntityId, (isize, isize)>,
     solid: HashSet<EntityId>, //flag component
     can_open_doors: HashSet<EntityId>,//flag components
 }
@@ -95,9 +77,17 @@ impl World {
         self.control.get(&id).map(|y| *y)
     }
 
+    fn get_material(&self, id: EntityId) -> Option<Materials> {
+        self.material.get(&id).map(|y| *y)
+    }
+
     fn get_icon(&self, id: EntityId) -> Option<String> {
         let k = format!("{}", self.icon.get(&id).unwrap());//.map(|y| *y)
         Some(String::from(k))      
+    }
+
+    fn get_pointer(&self, id: EntityId) -> Option<(isize,isize)> {
+       self.pointer.get(&id).map(|v| *v)
     }
 
     fn contains_solid(&self, id: EntityId) -> bool {
@@ -106,6 +96,10 @@ impl World {
 
     fn contains_can_open_doors(&self, id: EntityId) -> bool {
         self.can_open_doors.contains(&id)
+    }
+
+    fn contains_pointer(&self, id: EntityId) -> bool {
+        self.pointer.contains_key(&id)
     }
 
 
@@ -130,6 +124,8 @@ struct RemovedComponents {
     door_state: HashSet<EntityId>,
     tile: HashSet<EntityId>,
     control: HashSet<EntityId>,
+    material: HashSet<EntityId>,
+    pointer: HashSet<EntityId>,
     solid: HashSet<EntityId>,
     can_open_doors: HashSet<EntityId>,
     icon: HashSet<EntityId>
@@ -151,12 +147,20 @@ impl Action {
         self.removals.control.insert(id);
     }
 
+    pub fn remove_material(&mut self, id: EntityId) {
+        self.removals.material.insert(id);
+    }
+
     pub fn remove_solid(&mut self, id: EntityId) {
         self.removals.solid.insert(id);
     }
 
     pub fn remove_icon(&mut self, id: EntityId) {
         self.removals.icon.insert(id);
+    }
+
+    pub fn remove_pointer(&mut self, id: EntityId) {
+        self.removals.pointer.insert(id);
     }
 
     //more components
@@ -166,6 +170,14 @@ impl Action {
 
     pub fn insert_control(&mut self, id: EntityId, value: Control) {
         self.additions.control.insert(id, value);
+    }
+
+    pub fn insert_material(&mut self, id: EntityId, value: Materials) {
+        self.additions.material.insert(id, value);
+    }
+
+    pub fn insert_pointer(&mut self, id: EntityId, value: (isize, isize)) {
+        self.additions.pointer.insert(id, value);
     }
 
     pub fn insert_tile(&mut self, id: EntityId, value: TileType) {
@@ -195,16 +207,21 @@ impl Action {
         self.additions.door_state.clear();
         self.additions.tile.clear();
         self.additions.control.clear();
+        self.additions.material.clear();
         self.additions.solid.clear();
         self.additions.can_open_doors.clear();
         self.additions.icon.clear();
+        self.additions.pointer.clear();
+
         self.removals.position.clear();
         self.removals.door_state.clear();
         self.removals.tile.clear();
         self.removals.control.clear();
+        self.removals.material.clear();
         self.removals.solid.clear();
         self.removals.can_open_doors.clear();
         self.removals.icon.clear();
+        self.removals.pointer.clear();
     }
 }
 
@@ -221,6 +238,18 @@ fn commit_action(world: &mut World, action: &mut Action) {
         world.control.remove(&id);
     }
 
+    for id in action.removals.tile.drain() {
+        world.tile.remove(&id);
+    }
+
+    for id in action.removals.pointer.drain() {
+        world.pointer.remove(&id);
+    }
+
+    for id in action.removals.material.drain() {
+        world.pointer.remove(&id);
+    }
+
     //data insertions
     for (id, value) in action.additions.position.drain() {
         world.position.insert(id, value);
@@ -232,6 +261,14 @@ fn commit_action(world: &mut World, action: &mut Action) {
 
     for (id, value) in action.additions.tile.drain() {
         world.tile.insert(id, value);
+    }
+
+    for (id, value) in action.additions.pointer.drain() {
+        world.pointer.insert(id, value);
+    }
+
+    for (id, value) in action.additions.material.drain() {
+        world.material.insert(id, value);
     }
 
     // flag insertions
@@ -257,6 +294,94 @@ impl Direction {
     }
 }
 
+fn start_pointer(character_id: EntityId, world: &World, action: &mut Action) {
+    let start_position = world.get_position(character_id);
+    action.insert_pointer(character_id, start_position.unwrap());
+}
+
+fn pointer_control(character_id: EntityId, world: &World, action: &mut Action) {
+    terminal::read_event();
+    for event in terminal::events() {
+        match event {
+            Event::KeyPressed{ key: KeyCode::Escape, ctrl: _, shift: _ } => {
+                action.remove_pointer(character_id);
+                break;
+            }, // exit game
+            Event::KeyPressed{ key: KeyCode::Up, ctrl: _, shift: _ } => {
+                let mut d = Direction { x: 0, y: -1};
+                //d.x = 0;
+                //d.y = -1;
+                let (x, y) = world.get_pointer(character_id)
+                        .expect("Attempt to move entity with no position");
+
+                action.remove_pointer(character_id);
+                action.insert_pointer(character_id, (x, y-1));
+                break;
+                //player.move_by(0, -1, map);
+
+                //return false
+            },
+            Event::KeyPressed{ key: KeyCode::Down, ctrl: _, shift: _ } => {
+                let mut d = Direction { x: 0, y: 1 };
+                //d.x = 0;
+                //d.y = 1;
+                let (x, y) = world.get_pointer(character_id)
+                        .expect("Attempt to move entity with no position");
+
+                action.remove_pointer(character_id);
+                action.insert_pointer(character_id, (x, y+1));
+                break;
+                //player.move_by(0, 1, map);
+                //return false;
+            },
+            Event::KeyPressed{ key: KeyCode::Left, ctrl: _, shift: _ } => {
+                //player.move_by(-1, 0, map);
+                let mut d = Direction { x: -1, y : 0 };
+                //d.x = -1;
+                //d.y = 0;
+                let (x, y) = world.get_pointer(character_id)
+                        .expect("Attempt to move entity with no position");
+
+                action.remove_pointer(character_id);
+                action.insert_pointer(character_id, (x - 1, y));
+                                //return false;
+                break;
+            },
+            Event::KeyPressed{ key: KeyCode::Right, ctrl: _, shift: _ } => {
+                let mut d = Direction { x: 1, y: 0 };
+                //d.x = 1;
+                //d.y = 0;
+                let (x, y) = world.get_pointer(character_id)
+                        .expect("Attempt to move entity with no position");
+
+                action.remove_pointer(character_id);
+                action.insert_pointer(character_id, (x + 1, y));
+                break;
+                //player.move_by(1, 0, map);
+                //return false;
+            }
+            // Event::KeyPressed{ key: KeyCode::F, ctrl: _, shift: _ } => {
+            //     let mut e =;
+            //     return ActionType::Fire(entity_id);
+            // }
+
+            _ => (),
+        }
+    }
+    terminal::read_event();
+}
+
+fn move_pointer(character_id: EntityId, direction: Direction, world: &World, action: &mut Action) {
+    let current_position = world.get_pointer(character_id)
+        .expect("Attempt to move entity with no position");
+    let (x, y) = current_position;
+    let (dx, dy) = direction.unit_vector();
+    let new_position = (x+dx, y+dy);
+
+    action.insert_pointer(character_id, new_position);
+}
+
+
 fn move_character(character_id: EntityId, direction: Direction, world: &World, action: &mut Action) {
     let current_position = world.get_position(character_id)
         .expect("Attempt to move entity with no position");
@@ -264,6 +389,7 @@ fn move_character(character_id: EntityId, direction: Direction, world: &World, a
     let (dx, dy) = direction.unit_vector();
     let new_position = (x+dx, y+dy);
 
+    action.remove_position(character_id);
     action.insert_position(character_id, new_position);
 }
 
@@ -294,6 +420,9 @@ fn exit_game() {
 #[derive(Debug)]
 enum ActionType {
     MoveCharacter(EntityId, Direction),
+    StartPointer(EntityId),
+    MovePointer(EntityId, Direction),
+    PointerControl(EntityId),
     OpenDoor(EntityId),
     CloseDoor(EntityId),
     PlayerControl(EntityId),
@@ -308,6 +437,12 @@ fn create_action(action_type: ActionType, world: &World, action: &mut Action) {
         ActionType::MoveCharacter(entity_id, direction) => {
             move_character(entity_id, direction, world, action);
         }
+        ActionType::StartPointer(entity_id) => {
+            start_pointer(entity_id, world, action);
+        }
+        ActionType::MovePointer(entity_id, direction) => {
+            move_pointer(entity_id, direction, world, action);
+        }
         ActionType::OpenDoor(entity_id) => {
             open_door(entity_id, action);
         }
@@ -316,6 +451,9 @@ fn create_action(action_type: ActionType, world: &World, action: &mut Action) {
         }
         ActionType::PlayerControl(entity_id) => {
             player_control(entity_id, action);
+        }
+        ActionType::PointerControl(entity_id) => {
+            pointer_control(entity_id, world, action);
         }
         ActionType::AIControl(entity_id) => {
             ai_control(entity_id, action);
@@ -339,7 +477,36 @@ enum RuleStatus {
     StopChecking,
 }
 
+// fn aiming() -> (ActionStatus, RuleStatus) {
+//     let future_state = EntityStoreAfterAction {
+//         entity_store: world,
+//         action: action,
+//     };
+
+//     for (id,
+// }
+
 // rule
+fn look(action: &Action, world: &World, spatial_hash: &SpatialHashTable, reactions: &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus) {
+    let future_state = EntityStoreAfterAction {
+        entity_store: world,
+        action: action,
+    };
+
+    for (id, position) in action.additions.pointer.iter() {
+        reactions.push_front(ActionType::PointerControl(*id));
+        // only proceed if this entity can actually open doors
+        // if !future_state.contains_can_open_doors(&id) {  //add that contains to world
+        //     continue;
+        // }    for event in terminal::events() {
+      
+    }
+
+    // no doors were bumped, so check other rules
+    return (ActionStatus::Accept, RuleStatus::KeepChecking);
+
+}
+
 fn bump_open_doors(action: &Action, world: &World, spatial_hash: &SpatialHashTable, reactions: &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus) {
     // new
     let future_state = EntityStoreAfterAction {
@@ -507,7 +674,7 @@ impl<'a> EntityStoreAfterAction<'a> {
     }
 
     
-fn contains_can_open_doors(&self, id: &EntityId) -> bool {
+    fn contains_can_open_doors(&self, id: &EntityId) -> bool {
         self.entity_store.can_open_doors.contains(id)
     }
 
@@ -614,6 +781,13 @@ fn handle_keys(world: &World, entity_id: EntityId) -> ActionType {
                 //player.move_by(1, 0, map);
                 //return false;
             },
+            Event::KeyPressed{ key: KeyCode::K, ctrl: _, shift: _ } => {
+                return ActionType::StartPointer(entity_id);
+            }
+            // Event::KeyPressed{ key: KeyCode::F, ctrl: _, shift: _ } => {
+            //     let mut e =;
+            //     return ActionType::Fire(entity_id);
+            // }
 
             _ => (),
         }
@@ -642,10 +816,20 @@ impl Game {
             // if it's an NPC's turn.
             // The details of choosing an action are
             // out of scope.
+            
+            //eat extra inputs
+            terminal::read_event();
+
             let action_type: ActionType = CHOOSE_ACTION(&self.state, entity_id); // need to figure this one out done
             println!("{:?}", action_type);
+
+            //eat extra inputs
+            terminal::read_event();
+
             // Equeue the action for processing
+
             self.pending_actions.push_back(action_type);
+            //println!("an event{:?}",terminal::read_event());
 
             // Check rules, and handle any follow-on
             // actions.
@@ -654,6 +838,9 @@ impl Game {
             // Allow the entity to take another turn
             // at some point in the future.
             self.schedule.insert(entity_id);
+            //terminal::refresh();
+
+            //terminal::has_input();
         }
     }
 
@@ -730,6 +917,11 @@ impl Game {
 
 fn RENDER(world: &World, width: usize, height: usize) {
     terminal::clear(None);
+    if world.contains_pointer(0) {
+            let (px, py) = world.get_pointer(0).unwrap();
+            terminal::print_xy(px as i32, py as i32, "X");
+            //terminal::refresh();
+    }
     for key in world.position.keys() {
         let (x, y) = world.get_position(*key).unwrap();
         let icon = world.get_icon(*key);
@@ -738,9 +930,12 @@ fn RENDER(world: &World, width: usize, height: usize) {
         let st = icon.unwrap();//format!("{}", icon.unwrap();
         //let st = format!("[font=huge][U+2588][/font]");
         // full block [U+2588]
+        
         terminal::print_xy(x as i32, y as i32, &st);
-        terminal::refresh();
     }
+            terminal::refresh();
+
+
 }
 
 fn main() {
@@ -749,9 +944,13 @@ fn main() {
 	terminal::set(config::Window::empty().resizeable(true).cellsize(Cellsize::Sized(Size::new(8,8))));
     terminal::set(font::bitmap(font::Origin::Root, "Andux_cp866ish.png").codepage(code).size(Size::new(8, 12)).font_name(String::from("huge")));
 	terminal::refresh();
+    //framerate
+    terminal::delay(1000/29);
+
     type RuleFn = fn(&Action, &World, &SpatialHashTable, &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus);  // can prolly figure this out look at type example online
 
     let mut ruleContainer: Vec<RuleFn> = Vec::new();
+    ruleContainer.push(look);
     ruleContainer.push(bump_open_doors);
     ruleContainer.push(collision);
 
@@ -806,6 +1005,8 @@ fn main() {
             tile: til1,
             icon: ico1,
             control: cont1,
+            pointer: HashMap::new(),
+            material: HashMap::new(),
             solid: sol1, //flag component
             can_open_doors: cod1,
         },
@@ -820,6 +1021,8 @@ fn main() {
                 tile: til2,
                 icon: ico2,
                 control: cont2,
+                pointer: HashMap::new(),
+                material: HashMap::new(),
                 solid: sol2, //flag component
                 can_open_doors: cod2,
             },
@@ -828,6 +1031,8 @@ fn main() {
                 door_state: HashSet::new(),
                 tile: HashSet::new(),
                 control: HashSet::new(),
+                pointer: HashSet::new(),
+                material: HashSet::new(),
                 solid: HashSet::new(),
                 can_open_doors: HashSet::new(),
                 icon: HashSet::new()
