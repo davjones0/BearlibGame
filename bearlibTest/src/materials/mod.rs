@@ -18,7 +18,6 @@ pub struct Material {
 }*/
 
 
-
 pub fn fetch_material(x: Materials) -> Material {
     let STEEL: Material = Material {
         Name: "Steel".to_string(),
