@@ -60,6 +60,8 @@ pub struct World {
     control: HashMap<EntityId, Control>,
     material: HashMap<EntityId, Materials>,
     pointer: HashMap<EntityId, (isize, isize)>,
+    aim: HashMap<EntityId, (isize, isize)>,
+    aim_path: HashMap<EntityId, Vec<Point>>,
     solid: HashSet<EntityId>, //flag component
     can_open_doors: HashSet<EntityId>,//flag components
 }
@@ -91,6 +93,14 @@ impl World {
        self.pointer.get(&id).map(|v| *v)
     }
 
+    fn get_aim(&self, id: EntityId) -> Option<(isize,isize)> {
+       self.aim.get(&id).map(|v| *v)
+    }
+
+    fn get_aimpath(&self, id: EntityId) -> Option<&Vec<Point>> {
+        self.aim_path.get(&id).map(|x| x)
+    }
+
     fn contains_solid(&self, id: EntityId) -> bool {
         self.solid.contains(&id)
     }
@@ -103,6 +113,13 @@ impl World {
         self.pointer.contains_key(&id)
     }
 
+    fn contains_aim(&self, id: EntityId) -> bool {
+        self.aim.contains_key(&id)
+    }
+
+    fn contains_aimpath(&self, id: EntityId) -> bool {
+        self.aim_path.contains_key(&id)
+    }
 
     // pub fn createEntity(&self) -> usize {
     //     for entity in 0..ENTITY_COUNT {
@@ -127,6 +144,8 @@ struct RemovedComponents {
     control: HashSet<EntityId>,
     material: HashSet<EntityId>,
     pointer: HashSet<EntityId>,
+    aim: HashSet<EntityId>,
+    aim_path: HashSet<EntityId>,
     solid: HashSet<EntityId>,
     can_open_doors: HashSet<EntityId>,
     icon: HashSet<EntityId>
@@ -164,6 +183,14 @@ impl Action {
         self.removals.pointer.insert(id);
     }
 
+    pub fn remove_aim(&mut self, id: EntityId) {
+        self.removals.aim.insert(id);
+    }
+
+    pub fn remove_aimpath(&mut self, id: EntityId) {
+        self.removals.aim_path.insert(id);
+    }
+
     //more components
     pub fn insert_position(&mut self, id: EntityId, value: (isize, isize)) {
         self.additions.position.insert(id, value);
@@ -179,6 +206,14 @@ impl Action {
 
     pub fn insert_pointer(&mut self, id: EntityId, value: (isize, isize)) {
         self.additions.pointer.insert(id, value);
+    }
+
+    pub fn insert_aim(&mut self, id: EntityId, value: (isize, isize)) {
+        self.additions.aim.insert(id, value);
+    }
+
+    pub fn insert_aimpath(&mut self, id: EntityId, value: Vec<Point>) {
+        self.additions.aim_path.insert(id, value);
     }
 
     pub fn insert_tile(&mut self, id: EntityId, value: TileType) {
@@ -213,6 +248,8 @@ impl Action {
         self.additions.can_open_doors.clear();
         self.additions.icon.clear();
         self.additions.pointer.clear();
+        self.additions.aim.clear();
+        self.additions.aim_path.clear();
 
         self.removals.position.clear();
         self.removals.door_state.clear();
@@ -223,6 +260,8 @@ impl Action {
         self.removals.can_open_doors.clear();
         self.removals.icon.clear();
         self.removals.pointer.clear();
+        self.removals.aim.clear();
+        self.removals.aim_path.clear();
     }
 }
 
@@ -248,7 +287,15 @@ fn commit_action(world: &mut World, action: &mut Action) {
     }
 
     for id in action.removals.material.drain() {
-        world.pointer.remove(&id);
+        world.material.remove(&id);
+    }
+
+    for id in action.removals.aim.drain() {
+        world.aim.remove(&id);
+    }
+
+    for id in action.removals.aim_path.drain() {
+        world.aim_path.remove(&id);
     }
 
     //data insertions
@@ -266,6 +313,14 @@ fn commit_action(world: &mut World, action: &mut Action) {
 
     for (id, value) in action.additions.pointer.drain() {
         world.pointer.insert(id, value);
+    }
+
+    for (id, value) in action.additions.aim.drain() {
+        world.aim.insert(id, value);
+    }
+
+    for (id, value) in action.additions.aim_path.drain() {
+        world.aim_path.insert(id, value);
     }
 
     for (id, value) in action.additions.material.drain() {
@@ -298,6 +353,109 @@ impl Direction {
 fn start_pointer(character_id: EntityId, world: &World, action: &mut Action) {
     let start_position = world.get_position(character_id);
     action.insert_pointer(character_id, start_position.unwrap());
+}
+
+fn start_aim(character_id: EntityId, world: &World, action: &mut Action) {
+    let start_position = world.get_position(character_id);
+    action.insert_aim(character_id, start_position.unwrap());
+    //print!("startaim");
+}
+
+
+
+fn aim_control(character_id: EntityId, world: &World, action: &mut Action) {
+    //print!("control aim");
+    terminal::read_event();
+    for event in terminal::events() {
+        match event {
+            Event::KeyPressed{ key: KeyCode::Escape, ctrl: _, shift: _ } => {
+                action.remove_aim(character_id);
+                action.remove_aimpath(character_id);
+                break;
+            }, // exit game
+            Event::KeyPressed{ key: KeyCode::Up, ctrl: _, shift: _ } => {
+                let mut d = Direction { x: 0, y: -1};
+                //d.x = 0;
+                //d.y = -1;
+                let (x, y) = world.get_aim(character_id)
+                        .expect("Attempt to move entity with no position");
+                let (px, py) = world.get_position(character_id)
+                        .expect("Attempt to move entity with no position");
+
+                let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new(x as i32, (y-1) as i32));
+                action.remove_aim(character_id);
+                action.insert_aimpath(character_id, path);
+                action.insert_aim(character_id, (x, y-1));
+                break;
+                //player.move_by(0, -1, map);
+
+                //return false
+            },
+            Event::KeyPressed{ key: KeyCode::Down, ctrl: _, shift: _ } => {
+                let mut d = Direction { x: 0, y: 1 };
+                //d.x = 0;
+                //d.y = 1;
+                let (x, y) = world.get_aim(character_id)
+                        .expect("Attempt to move entity with no position");
+                let (px, py) = world.get_position(character_id)
+                        .expect("Attempt to move entity with no position");
+
+                let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new(x as i32, (y+1) as i32));
+                action.remove_aim(character_id);
+                action.insert_aimpath(character_id, path);
+                action.insert_aim(character_id, (x, y+1));
+                break;
+                //player.move_by(0, 1, map);
+                //return false;
+            },
+            Event::KeyPressed{ key: KeyCode::Left, ctrl: _, shift: _ } => {
+                //player.move_by(-1, 0, map);
+                let mut d = Direction { x: -1, y : 0 };
+                //d.x = -1;
+                //d.y = 0;
+                let (x, y) = world.get_aim(character_id)
+                        .expect("Attempt to move entity with no position");
+                let (px, py) = world.get_position(character_id)
+                        .expect("Attempt to move entity with no position");
+
+                let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new((x-1) as i32, y as i32));
+                action.remove_aim(character_id);
+                action.insert_aimpath(character_id, path);
+                action.insert_aim(character_id, (x - 1, y));
+                                //return false;
+                break;
+            },
+            Event::KeyPressed{ key: KeyCode::Right, ctrl: _, shift: _ } => {
+                let mut d = Direction { x: 1, y: 0 };
+                //d.x = 1;
+                //d.y = 0;
+                let (x, y) = world.get_aim(character_id)
+                        .expect("Attempt to move entity with no position");
+                let (px, py) = world.get_position(character_id)
+                        .expect("Attempt to move entity with no position");
+
+                let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new((x+1) as i32, (y) as i32));
+                action.remove_aim(character_id);
+                action.insert_aimpath(character_id, path);
+                action.insert_aim(character_id, (x + 1, y));
+                break;
+                //player.move_by(1, 0, map);
+                //return false;
+            },
+            Event::KeyPressed{ key: KeyCode::Enter, ctrl: _, shift: _ } => {
+                let (x, y) = world.get_pointer(character_id)
+                        .expect("Attempt to move entity with no position");
+
+            }
+            // Event::KeyPressed{ key: KeyCode::F, ctrl: _, shift: _ } => {
+            //     let mut e =;
+            //     return ActionType::Fire(entity_id);
+            // }
+
+            _ => (),
+        }
+    }
+    terminal::read_event();
 }
 
 fn pointer_control(character_id: EntityId, world: &World, action: &mut Action) {
@@ -382,6 +540,16 @@ fn move_pointer(character_id: EntityId, direction: Direction, world: &World, act
     action.insert_pointer(character_id, new_position);
 }
 
+fn move_aim(character_id: EntityId, direction: Direction, world: &World, action: &mut Action) {
+    let current_position = world.get_pointer(character_id)
+        .expect("Attempt to move entity with no position");
+    let (x, y) = current_position;
+    let (dx, dy) = direction.unit_vector();
+    let new_position = (x+dx, y+dy);
+
+    action.insert_aim(character_id, new_position);
+}
+
 
 fn move_character(character_id: EntityId, direction: Direction, world: &World, action: &mut Action) {
     let current_position = world.get_position(character_id)
@@ -424,6 +592,9 @@ pub enum ActionType {
     StartPointer(EntityId),
     MovePointer(EntityId, Direction),
     PointerControl(EntityId),
+    StartAim(EntityId),
+    MoveAim(EntityId, Direction),
+    AimControl(EntityId),
     OpenDoor(EntityId),
     CloseDoor(EntityId),
     PlayerControl(EntityId),
@@ -441,8 +612,14 @@ fn create_action(action_type: ActionType, world: &World, action: &mut Action) {
         ActionType::StartPointer(entity_id) => {
             start_pointer(entity_id, world, action);
         }
+        ActionType::StartAim(entity_id) => {
+            start_aim(entity_id, world, action);
+        }
         ActionType::MovePointer(entity_id, direction) => {
             move_pointer(entity_id, direction, world, action);
+        }
+        ActionType::MoveAim(entity_id, direction) => {
+            move_aim(entity_id, direction, world, action);
         }
         ActionType::OpenDoor(entity_id) => {
             open_door(entity_id, action);
@@ -455,6 +632,9 @@ fn create_action(action_type: ActionType, world: &World, action: &mut Action) {
         }
         ActionType::PointerControl(entity_id) => {
             pointer_control(entity_id, world, action);
+        }
+        ActionType::AimControl(entity_id) => {
+            aim_control(entity_id, world, action);
         }
         ActionType::AIControl(entity_id) => {
             ai_control(entity_id, action);
@@ -712,6 +892,9 @@ fn handle_keys(world: &World, entity_id: EntityId) -> ActionType {
             },
             Event::KeyPressed{ key: KeyCode::K, ctrl: _, shift: _ } => {
                 return ActionType::StartPointer(entity_id);
+            },
+            Event::KeyPressed{ key: KeyCode::F, ctrl: _, shift: _ } => {
+                return ActionType::StartAim(entity_id);
             }
             // Event::KeyPressed{ key: KeyCode::F, ctrl: _, shift: _ } => {
             //     let mut e =;
@@ -819,7 +1002,7 @@ impl Game {
                 // process.
                 self.map.update(&self.action);
                 commit_action(&mut self.state, &mut self.action);
-                println!("{:?}", self.map.data[(5 + WIDTH * 14) as usize]);
+                //println!("{:?}", self.map.data[(5 + WIDTH * 14) as usize]);
                 // It's only necessary to re-draw the scene after
                 // something has changed.
                 // The details of rendering are out of scope.
@@ -851,10 +1034,23 @@ fn RENDER(world: &World, width: usize, height: usize) {
             terminal::print_xy(px as i32, py as i32, "X");
             //terminal::refresh();
     }
+
+    if world.contains_aim(0) {
+        println!("has aim");
+        let path =  world.get_aimpath(0);
+        print!("{:?} hl", path);
+        if path.is_some() {
+            for point in path.unwrap().iter() {
+                println!("{:?} in", point);
+                terminal::print_xy(point.x as i32, point.y as i32, "-");
+            } 
+        }
+    }
+
     for key in world.position.keys() {
         let (x, y) = world.get_position(*key).unwrap();
         let icon = world.get_icon(*key);
-        println!("{},{}", x, y);
+        //println!("{},{}", x, y);
         //terminal::with_foreground(Color::from_rgb(100,100,100), || terminal::put_xy(x as i32, y as i32, icon.unwrap()));
         let st = icon.unwrap();//format!("{}", icon.unwrap();
         //let st = format!("[font=huge][U+2588][/font]");
@@ -881,11 +1077,12 @@ fn main() {
 
     let thisone = Point::new(0,0);
     let thatone = Point::new(6,3);
-    println!("{:?}", pathing::supercover::supercover_line(thisone, thatone));
+    //println!("{:?}", pathing::supercover::supercover_line(thisone, thatone));
 
     type RuleFn = fn(&Action, &World, &SpatialHashTable, &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus);  // can prolly figure this out look at type example online
 
     let mut ruleContainer: Vec<RuleFn> = Vec::new();
+    ruleContainer.push(rules::aim);
     ruleContainer.push(rules::look);
     ruleContainer.push(rules::bump_open_doors);
     ruleContainer.push(rules::collision);
@@ -943,6 +1140,8 @@ fn main() {
             control: cont1,
             pointer: HashMap::new(),
             material: HashMap::new(),
+            aim: HashMap::new(),
+            aim_path: HashMap::new(),
             solid: sol1, //flag component
             can_open_doors: cod1,
         },
@@ -959,6 +1158,8 @@ fn main() {
                 control: cont2,
                 pointer: HashMap::new(),
                 material: HashMap::new(),
+                aim: HashMap::new(),
+                aim_path: HashMap::new(),
                 solid: sol2, //flag component
                 can_open_doors: cod2,
             },
@@ -970,6 +1171,8 @@ fn main() {
                 pointer: HashSet::new(),
                 material: HashSet::new(),
                 solid: HashSet::new(),
+                aim: HashSet::new(),
+                aim_path: HashSet::new(),
                 can_open_doors: HashSet::new(),
                 icon: HashSet::new()
             }

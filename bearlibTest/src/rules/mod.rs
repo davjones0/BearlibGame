@@ -7,6 +7,20 @@ use World;
 use SpatialHashTable;
 use Action;
 
+pub fn aim(action: &Action, world: &World, spatial_hash: &SpatialHashTable, reactions: &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus) {
+    let future_state = EntityStoreAfterAction {
+        entity_store: world,
+        action: action,
+    };
+
+    for (id, position) in action.additions.aim.iter() {
+        reactions.push_front(ActionType::AimControl(*id));
+    }
+    
+    return (ActionStatus::Accept, RuleStatus::KeepChecking);
+
+}
+
 pub fn look(action: &Action, world: &World, spatial_hash: &SpatialHashTable, reactions: &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus) {
     let future_state = EntityStoreAfterAction {
         entity_store: world,
@@ -33,7 +47,7 @@ pub fn bump_open_doors(action: &Action, world: &World, spatial_hash: &SpatialHas
         entity_store: world,
         action: action,
     };
-    println!("hit1");
+    //println!("hit1");
     // loop through all positions set by the action
     for (id, position) in action.additions.position.iter() {
 
@@ -59,7 +73,7 @@ pub fn bump_open_doors(action: &Action, world: &World, spatial_hash: &SpatialHas
 
 
 pub fn collision(action: &Action, state: &World, spatial_hash: &SpatialHashTable, reactions: &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus) {
-    println!("hit2");
+    //println!("hit2");
     let future_state = EntityStoreAfterAction {
         entity_store: state,
         action: action,
@@ -69,7 +83,7 @@ pub fn collision(action: &Action, state: &World, spatial_hash: &SpatialHashTable
         if !future_state.contains_solid(&id) {
             continue;
         }
-        println!("{}..{:?}",spatial_hash.get(position).is_solid(), position);
+        //println!("{}..{:?}",spatial_hash.get(position).is_solid(), position);
         if spatial_hash.get(position).is_solid() {
             return (ActionStatus::Reject, RuleStatus::StopChecking);
         }
