@@ -4,6 +4,8 @@ entity component wip
 
 ***********************/
 extern crate bear_lib_terminal;
+extern crate num_traits;
+
 
 use bear_lib_terminal::Color;
 use bear_lib_terminal::geometry::{Point, Size};
@@ -17,6 +19,7 @@ use std::collections::VecDeque;
 mod materials;
 mod pathing;
 mod rules;
+mod actions;
 
 #[derive(Copy, Clone)]
 pub enum Materials {
@@ -350,241 +353,6 @@ impl Direction {
     }
 }
 
-fn start_pointer(character_id: EntityId, world: &World, action: &mut Action) {
-    let start_position = world.get_position(character_id);
-    action.insert_pointer(character_id, start_position.unwrap());
-}
-
-fn start_aim(character_id: EntityId, world: &World, action: &mut Action) {
-    let start_position = world.get_position(character_id);
-    action.insert_aim(character_id, start_position.unwrap());
-    //print!("startaim");
-}
-
-
-
-fn aim_control(character_id: EntityId, world: &World, action: &mut Action) {
-    //print!("control aim");
-    terminal::read_event();
-    for event in terminal::events() {
-        match event {
-            Event::KeyPressed{ key: KeyCode::Escape, ctrl: _, shift: _ } => {
-                action.remove_aim(character_id);
-                action.remove_aimpath(character_id);
-                break;
-            }, // exit game
-            Event::KeyPressed{ key: KeyCode::Up, ctrl: _, shift: _ } => {
-                let mut d = Direction { x: 0, y: -1};
-                //d.x = 0;
-                //d.y = -1;
-                let (x, y) = world.get_aim(character_id)
-                        .expect("Attempt to move entity with no position");
-                let (px, py) = world.get_position(character_id)
-                        .expect("Attempt to move entity with no position");
-
-                let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new(x as i32, (y-1) as i32));
-                action.remove_aim(character_id);
-                action.insert_aimpath(character_id, path);
-                action.insert_aim(character_id, (x, y-1));
-                break;
-                //player.move_by(0, -1, map);
-
-                //return false
-            },
-            Event::KeyPressed{ key: KeyCode::Down, ctrl: _, shift: _ } => {
-                let mut d = Direction { x: 0, y: 1 };
-                //d.x = 0;
-                //d.y = 1;
-                let (x, y) = world.get_aim(character_id)
-                        .expect("Attempt to move entity with no position");
-                let (px, py) = world.get_position(character_id)
-                        .expect("Attempt to move entity with no position");
-
-                let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new(x as i32, (y+1) as i32));
-                action.remove_aim(character_id);
-                action.insert_aimpath(character_id, path);
-                action.insert_aim(character_id, (x, y+1));
-                break;
-                //player.move_by(0, 1, map);
-                //return false;
-            },
-            Event::KeyPressed{ key: KeyCode::Left, ctrl: _, shift: _ } => {
-                //player.move_by(-1, 0, map);
-                let mut d = Direction { x: -1, y : 0 };
-                //d.x = -1;
-                //d.y = 0;
-                let (x, y) = world.get_aim(character_id)
-                        .expect("Attempt to move entity with no position");
-                let (px, py) = world.get_position(character_id)
-                        .expect("Attempt to move entity with no position");
-
-                let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new((x-1) as i32, y as i32));
-                action.remove_aim(character_id);
-                action.insert_aimpath(character_id, path);
-                action.insert_aim(character_id, (x - 1, y));
-                                //return false;
-                break;
-            },
-            Event::KeyPressed{ key: KeyCode::Right, ctrl: _, shift: _ } => {
-                let mut d = Direction { x: 1, y: 0 };
-                //d.x = 1;
-                //d.y = 0;
-                let (x, y) = world.get_aim(character_id)
-                        .expect("Attempt to move entity with no position");
-                let (px, py) = world.get_position(character_id)
-                        .expect("Attempt to move entity with no position");
-
-                let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new((x+1) as i32, (y) as i32));
-                action.remove_aim(character_id);
-                action.insert_aimpath(character_id, path);
-                action.insert_aim(character_id, (x + 1, y));
-                break;
-                //player.move_by(1, 0, map);
-                //return false;
-            },
-            Event::KeyPressed{ key: KeyCode::Enter, ctrl: _, shift: _ } => {
-                let (x, y) = world.get_pointer(character_id)
-                        .expect("Attempt to move entity with no position");
-
-            }
-            // Event::KeyPressed{ key: KeyCode::F, ctrl: _, shift: _ } => {
-            //     let mut e =;
-            //     return ActionType::Fire(entity_id);
-            // }
-
-            _ => (),
-        }
-    }
-    terminal::read_event();
-}
-
-fn pointer_control(character_id: EntityId, world: &World, action: &mut Action) {
-    terminal::read_event();
-    for event in terminal::events() {
-        match event {
-            Event::KeyPressed{ key: KeyCode::Escape, ctrl: _, shift: _ } => {
-                action.remove_pointer(character_id);
-                break;
-            }, // exit game
-            Event::KeyPressed{ key: KeyCode::Up, ctrl: _, shift: _ } => {
-                let mut d = Direction { x: 0, y: -1};
-                //d.x = 0;
-                //d.y = -1;
-                let (x, y) = world.get_pointer(character_id)
-                        .expect("Attempt to move entity with no position");
-
-                action.remove_pointer(character_id);
-                action.insert_pointer(character_id, (x, y-1));
-                break;
-                //player.move_by(0, -1, map);
-
-                //return false
-            },
-            Event::KeyPressed{ key: KeyCode::Down, ctrl: _, shift: _ } => {
-                let mut d = Direction { x: 0, y: 1 };
-                //d.x = 0;
-                //d.y = 1;
-                let (x, y) = world.get_pointer(character_id)
-                        .expect("Attempt to move entity with no position");
-
-                action.remove_pointer(character_id);
-                action.insert_pointer(character_id, (x, y+1));
-                break;
-                //player.move_by(0, 1, map);
-                //return false;
-            },
-            Event::KeyPressed{ key: KeyCode::Left, ctrl: _, shift: _ } => {
-                //player.move_by(-1, 0, map);
-                let mut d = Direction { x: -1, y : 0 };
-                //d.x = -1;
-                //d.y = 0;
-                let (x, y) = world.get_pointer(character_id)
-                        .expect("Attempt to move entity with no position");
-
-                action.remove_pointer(character_id);
-                action.insert_pointer(character_id, (x - 1, y));
-                                //return false;
-                break;
-            },
-            Event::KeyPressed{ key: KeyCode::Right, ctrl: _, shift: _ } => {
-                let mut d = Direction { x: 1, y: 0 };
-                //d.x = 1;
-                //d.y = 0;
-                let (x, y) = world.get_pointer(character_id)
-                        .expect("Attempt to move entity with no position");
-
-                action.remove_pointer(character_id);
-                action.insert_pointer(character_id, (x + 1, y));
-                break;
-                //player.move_by(1, 0, map);
-                //return false;
-            }
-            // Event::KeyPressed{ key: KeyCode::F, ctrl: _, shift: _ } => {
-            //     let mut e =;
-            //     return ActionType::Fire(entity_id);
-            // }
-
-            _ => (),
-        }
-    }
-    terminal::read_event();
-}
-
-fn move_pointer(character_id: EntityId, direction: Direction, world: &World, action: &mut Action) {
-    let current_position = world.get_pointer(character_id)
-        .expect("Attempt to move entity with no position");
-    let (x, y) = current_position;
-    let (dx, dy) = direction.unit_vector();
-    let new_position = (x+dx, y+dy);
-
-    action.insert_pointer(character_id, new_position);
-}
-
-fn move_aim(character_id: EntityId, direction: Direction, world: &World, action: &mut Action) {
-    let current_position = world.get_pointer(character_id)
-        .expect("Attempt to move entity with no position");
-    let (x, y) = current_position;
-    let (dx, dy) = direction.unit_vector();
-    let new_position = (x+dx, y+dy);
-
-    action.insert_aim(character_id, new_position);
-}
-
-
-fn move_character(character_id: EntityId, direction: Direction, world: &World, action: &mut Action) {
-    let current_position = world.get_position(character_id)
-        .expect("Attempt to move entity with no position");
-    let (x, y) = current_position;
-    let (dx, dy) = direction.unit_vector();
-    let new_position = (x+dx, y+dy);
-
-    action.remove_position(character_id);
-    action.insert_position(character_id, new_position);
-}
-
-fn open_door(door_id: EntityId, action: &mut Action) {
-    action.remove_solid(door_id);
-    action.insert_tile(door_id, TileType::OpenDoor);//add this
-    action.insert_door_state(door_id, DoorState::Open);//add this
-}
-
-fn close_door(door_id: EntityId, action: &mut Action) {
-    action.insert_solid(door_id);
-    action.insert_tile(door_id, TileType::ClosedDoor);//add this
-    action.insert_door_state(door_id, DoorState::Closed);//add this
-}
-
-fn player_control(player_id: EntityId, action: &mut Action) {
-    action.insert_control(player_id, Control::Player);
-}
-
-fn ai_control(player_id: EntityId, action: &mut Action) {
-    action.insert_control(player_id, Control::AI);
-}
-
-fn exit_game() {
-    terminal::close();
-}
 
 #[derive(Debug)]
 pub enum ActionType {
@@ -607,40 +375,40 @@ fn create_action(action_type: ActionType, world: &World, action: &mut Action) {
 
     match action_type {
         ActionType::MoveCharacter(entity_id, direction) => {
-            move_character(entity_id, direction, world, action);
+            actions::move_character(entity_id, direction, world, action);
         }
         ActionType::StartPointer(entity_id) => {
-            start_pointer(entity_id, world, action);
+            actions::start_pointer(entity_id, world, action);
         }
         ActionType::StartAim(entity_id) => {
-            start_aim(entity_id, world, action);
+            actions::start_aim(entity_id, world, action);
         }
         ActionType::MovePointer(entity_id, direction) => {
-            move_pointer(entity_id, direction, world, action);
+            actions::move_pointer(entity_id, direction, world, action);
         }
         ActionType::MoveAim(entity_id, direction) => {
-            move_aim(entity_id, direction, world, action);
+            actions::move_aim(entity_id, direction, world, action);
         }
         ActionType::OpenDoor(entity_id) => {
-            open_door(entity_id, action);
+            actions::open_door(entity_id, action);
         }
         ActionType::CloseDoor(entity_id) => {
-            close_door(entity_id, action);
+            actions::close_door(entity_id, action);
         }
         ActionType::PlayerControl(entity_id) => {
-            player_control(entity_id, action);
+            actions::player_control(entity_id, action);
         }
         ActionType::PointerControl(entity_id) => {
-            pointer_control(entity_id, world, action);
+            actions::pointer_control(entity_id, world, action);
         }
         ActionType::AimControl(entity_id) => {
-            aim_control(entity_id, world, action);
+            actions::aim_control(entity_id, world, action);
         }
         ActionType::AIControl(entity_id) => {
-            ai_control(entity_id, action);
+            actions::ai_control(entity_id, action);
         }
         ActionType::Exit => {
-            exit_game();
+            actions::exit_game();
         }
 
     }
@@ -1036,12 +804,14 @@ fn RENDER(world: &World, width: usize, height: usize) {
     }
 
     if world.contains_aim(0) {
-        println!("has aim");
+        let (px, py) = world.get_aim(0).unwrap();
+        terminal::print_xy(px as i32, py as i32, "X");
+    }
+
+    if world.contains_aim(0) {
         let path =  world.get_aimpath(0);
-        print!("{:?} hl", path);
         if path.is_some() {
             for point in path.unwrap().iter() {
-                println!("{:?} in", point);
                 terminal::print_xy(point.x as i32, point.y as i32, "-");
             } 
         }
