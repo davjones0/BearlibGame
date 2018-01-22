@@ -6,6 +6,9 @@ use Control;
 use DoorState;
 use pathing;
 use TileType;
+use ActionType;
+use ProjectileType;
+use Materials;
 use bear_lib_terminal::geometry::Point;
 use bear_lib_terminal::terminal::{self, config, Event, KeyCode};
 
@@ -37,88 +40,77 @@ pub fn aim_control(character_id: EntityId, world: &World, action: &mut Action) {
             }, // exit game
             Event::KeyPressed{ key: KeyCode::Up, ctrl: _, shift: _ } => {
                 let mut d = Direction { x: 0, y: -1};
-                //d.x = 0;
-                //d.y = -1;
+
                 let (x, y) = world.get_aim(character_id)
                         .expect("Attempt to move entity with no position");
                 let (px, py) = world.get_position(character_id)
                         .expect("Attempt to move entity with no position");
 
-                action.insert_aim(character_id, (x, y-1));
-                //let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new((x) as i32, (y-1) as i32));
+                ActionType::MoveAim(character_id, d);
                 let path = supercover_path_maker(px as i32, py as i32, x as i32, (y-1) as i32);
 
                 action.insert_aimpath(character_id, path);
                 
                 break;
-                //player.move_by(0, -1, map);
 
-                //return false
             },
             Event::KeyPressed{ key: KeyCode::Down, ctrl: _, shift: _ } => {
                 let mut d = Direction { x: 0, y: 1 };
-                //d.x = 0;
-                //d.y = 1;
+
                 let (x, y) = world.get_aim(character_id)
                         .expect("Attempt to move entity with no position");
                 let (px, py) = world.get_position(character_id)
                         .expect("Attempt to move entity with no position");
 
-                //let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new((x) as i32, (y+1) as i32));
                 let path = supercover_path_maker(px as i32, py as i32, x as i32, (y+1) as i32);
 
                 action.insert_aimpath(character_id, path);
                      
-                action.insert_aim(character_id, (x, y+1));
+                ActionType::MoveAim(character_id, d);
                 break;
-                //player.move_by(0, 1, map);
-                //return false;
+
             },
             Event::KeyPressed{ key: KeyCode::Left, ctrl: _, shift: _ } => {
-                //player.move_by(-1, 0, map);
                 let mut d = Direction { x: -1, y : 0 };
-                //d.x = -1;
-                //d.y = 0;
+
                 let (x, y) = world.get_aim(character_id)
                         .expect("Attempt to move entity with no position");
                 let (px, py) = world.get_position(character_id)
                         .expect("Attempt to move entity with no position");
 
-                //let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new((x-1) as i32, y as i32));
                 let path = supercover_path_maker(px as i32, py as i32, (x-1) as i32, y as i32);
 
                 action.insert_aimpath(character_id, path);
-                action.insert_aim(character_id, (x - 1, y));
-                                //return false;
+                ActionType::MoveAim(character_id, d);
                 break;
             },
             Event::KeyPressed{ key: KeyCode::Right, ctrl: _, shift: _ } => {
                 let mut d = Direction { x: 1, y: 0 };
-                //d.x = 1;
-                //d.y = 0;
+
                 let (x, y) = world.get_aim(character_id)
                         .expect("Attempt to move entity with no position");
                 let (px, py) = world.get_position(character_id)
                         .expect("Attempt to move entity with no position");
 
                 
-                //let path = pathing::supercover::supercover_line(Point::new(px as i32, py as i32), Point::new((x+1) as i32, (y) as i32));
                 let path = supercover_path_maker(px as i32, py as i32, (x+1) as i32, y as i32);
                 action.insert_aimpath(character_id, path);           
-                action.insert_aim(character_id, (x + 1, y));
+                ActionType::MoveAim(character_id, d);
                 break;
-                //player.move_by(1, 0, map);
-                //return false;
+                
             },
             Event::KeyPressed{ key: KeyCode::Enter, ctrl: _, shift: _ } => {
                 let (x, y) = world.get_pointer(character_id)
                         .expect("Attempt to move entity with no position");
+                let path = world.get_aimpath(character_id).unwrap();
+                ActionType::
+                action.remove_aim(character_id);
+                action.remove_aimpath(character_id);
+
+                break;
 
             }
-            // Event::KeyPressed{ key: KeyCode::F, ctrl: _, shift: _ } => {
-            //     let mut e =;
-            //     return ActionType::Fire(entity_id);
-            // }
+            
 
             _ => (),
         }
@@ -141,8 +133,7 @@ pub fn pointer_control(character_id: EntityId, world: &World, action: &mut Actio
                 let (x, y) = world.get_pointer(character_id)
                         .expect("Attempt to move entity with no position");
 
-                action.remove_pointer(character_id);
-                action.insert_pointer(character_id, (x, y-1));
+                ActionType::MovePointer(character_id, d);
                 break;
                 //player.move_by(0, -1, map);
 
@@ -155,8 +146,7 @@ pub fn pointer_control(character_id: EntityId, world: &World, action: &mut Actio
                 let (x, y) = world.get_pointer(character_id)
                         .expect("Attempt to move entity with no position");
 
-                action.remove_pointer(character_id);
-                action.insert_pointer(character_id, (x, y+1));
+                ActionType::MoveCharacter(character_id, d);
                 break;
                 //player.move_by(0, 1, map);
                 //return false;
@@ -169,8 +159,7 @@ pub fn pointer_control(character_id: EntityId, world: &World, action: &mut Actio
                 let (x, y) = world.get_pointer(character_id)
                         .expect("Attempt to move entity with no position");
 
-                action.remove_pointer(character_id);
-                action.insert_pointer(character_id, (x - 1, y));
+                ActionType::MovePointer(character_id, d);
                                 //return false;
                 break;
             },
@@ -181,8 +170,7 @@ pub fn pointer_control(character_id: EntityId, world: &World, action: &mut Actio
                 let (x, y) = world.get_pointer(character_id)
                         .expect("Attempt to move entity with no position");
 
-                action.remove_pointer(character_id);
-                action.insert_pointer(character_id, (x + 1, y));
+                ActionType::MovePointer(character_id, d);
                 break;
                 //player.move_by(1, 0, map);
                 //return false;
@@ -230,6 +218,16 @@ pub fn move_character(character_id: EntityId, direction: Direction, world: &Worl
     action.insert_position(character_id, new_position);
 }
 
+pub fn fire_projectile(character_id: EntityId, world: &World, action: &mut Action) {
+     let projectile_id = spawn_entity(world);
+     action.insert_icon(projectile_id, String::from("*"));
+     action.insert_projectile(projectile_id, ProjectileType::Bullet);
+    
+     action.insert_material(projectile_id, Materials::Steel);
+     action.insert_aimpath(projectile_id, );
+     //action.insert_position(projectile_id, );
+}
+
 pub fn open_door(door_id: EntityId, action: &mut Action) {
     action.remove_solid(door_id);
     action.insert_tile(door_id, TileType::OpenDoor);//add this
@@ -254,7 +252,13 @@ pub fn exit_game() {
     terminal::close();
 }
 
+pub fn spawn_entity(world: &World) -> EntityId {
+    let mut keyNum = world.position.len();
+    keyNum += 1;
+    return keyNum as u64;
+}
 
+// helper functions
 fn supercover_path_maker(startx: i32, starty: i32, endx: i32, endy: i32) -> Vec<Point> {
     let mut path: Vec<Point> = vec![];
     println!("Start: {},{}  $$  End: {},{}", startx, starty, endx, endy);

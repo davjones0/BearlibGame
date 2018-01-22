@@ -41,6 +41,12 @@ pub enum Control {
     Player,
     AI,
 }
+
+#[derive(Clone)]
+pub enum ProjectileType {
+    Bullet,
+}
+
 const WIDTH: i32 = 20;
 const HEIGHT: i32 = 20;
 
@@ -65,6 +71,7 @@ pub struct World {
     pointer: HashMap<EntityId, (isize, isize)>,
     aim: HashMap<EntityId, (isize, isize)>,
     aim_path: HashMap<EntityId, Vec<Point>>,
+    projectile: HashMap<EntityId, ProjectileType>,
     solid: HashSet<EntityId>, //flag component
     can_open_doors: HashSet<EntityId>,//flag components
 }
@@ -74,7 +81,7 @@ impl World {
     fn get_position(&self, id: EntityId) -> Option<(isize,isize)> {
        self.position.get(&id).map(|v| *v)
     }
-
+  
     fn get_door_state(&self, id: EntityId) -> Option<DoorState> {
         self.door_state.get(&id).map(|z| *z)
     }
@@ -104,6 +111,10 @@ impl World {
         self.aim_path.get(&id).map(|x| x)
     }
 
+    fn get_projectile(&self, id: EntityId) -> Option<ProjectileType> {
+        self.projectile.get(&id).map(|x| *x)
+    }
+
     fn contains_solid(&self, id: EntityId) -> bool {
         self.solid.contains(&id)
     }
@@ -121,6 +132,10 @@ impl World {
     }
 
     fn contains_aimpath(&self, id: EntityId) -> bool {
+        self.aim_path.contains_key(&id)
+    }
+
+    fn contains_projectile(&self, id: EntityId) -> bool {
         self.aim_path.contains_key(&id)
     }
 
@@ -149,6 +164,7 @@ struct RemovedComponents {
     pointer: HashSet<EntityId>,
     aim: HashSet<EntityId>,
     aim_path: HashSet<EntityId>,
+    projectile: HashSet<EntityId>,
     solid: HashSet<EntityId>,
     can_open_doors: HashSet<EntityId>,
     icon: HashSet<EntityId>
@@ -194,6 +210,10 @@ impl Action {
         self.removals.aim_path.insert(id);
     }
 
+    pub fn remove_projectile(&mut self, id: EntityId) {
+        self.removals.projectile.insert(id);
+    }
+
     //more components
     pub fn insert_position(&mut self, id: EntityId, value: (isize, isize)) {
         self.additions.position.insert(id, value);
@@ -231,6 +251,10 @@ impl Action {
         self.additions.icon.insert(id, value);
     }
 
+    pub fn insert_projectile(&mut self, id: EntityId, value: ProjectileType) {
+        self.additions.projectile.insert(id, value);
+    }
+
     // more components
     pub fn insert_solid(&mut self, id: EntityId) {
         self.additions.solid.insert(id);
@@ -253,6 +277,7 @@ impl Action {
         self.additions.pointer.clear();
         self.additions.aim.clear();
         self.additions.aim_path.clear();
+        self.additions.projectile.clear();
 
         self.removals.position.clear();
         self.removals.door_state.clear();
@@ -265,6 +290,7 @@ impl Action {
         self.removals.pointer.clear();
         self.removals.aim.clear();
         self.removals.aim_path.clear();
+        self.removals.projectile.clear();
     }
 }
 
@@ -330,6 +356,10 @@ fn commit_action(world: &mut World, action: &mut Action) {
         world.material.insert(id, value);
     }
 
+    for (id, value) in action.additions.projectile.drain() {
+        world.projectile.insert(id, value);
+    }
+
     // flag insertions
     for id in action.additions.solid.drain() {
         world.solid.insert(id);
@@ -367,6 +397,7 @@ pub enum ActionType {
     CloseDoor(EntityId),
     PlayerControl(EntityId),
     AIControl(EntityId),
+    FireProjectile(EntityId),
     Exit,
 }
 
@@ -406,6 +437,9 @@ fn create_action(action_type: ActionType, world: &World, action: &mut Action) {
         }
         ActionType::AIControl(entity_id) => {
             actions::ai_control(entity_id, action);
+        }
+        ActionType::FireProjectile(entity_id) => {
+            actions::fire_projectile(entity_id, world, action);
         }
         ActionType::Exit => {
             actions::exit_game();

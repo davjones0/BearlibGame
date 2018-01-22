@@ -91,7 +91,7 @@ fn supercover_tests() {
 
     assert_eq!(
         supercover(Point::new(12, 10), Point::new(12, 11)),
-        [Point::new(12, 10), Point::new(12, 11), Point::new()]
+        [Point::new(12, 10), Point::new(12, 11)]
     );
 }
 
