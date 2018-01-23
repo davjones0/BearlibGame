@@ -46,7 +46,7 @@ pub fn aim_control(character_id: EntityId, world: &World, action: &mut Action) {
                 let (px, py) = world.get_position(character_id)
                         .expect("Attempt to move entity with no position");
 
-                ActionType::MoveAim(character_id, d);
+                action.insert_aim(character_id, (x, y-1));
                 let path = supercover_path_maker(px as i32, py as i32, x as i32, (y-1) as i32);
 
                 action.insert_aimpath(character_id, path);
@@ -66,7 +66,7 @@ pub fn aim_control(character_id: EntityId, world: &World, action: &mut Action) {
 
                 action.insert_aimpath(character_id, path);
                      
-                ActionType::MoveAim(character_id, d);
+                action.insert_aim(character_id, (x, y+1));
                 break;
 
             },
@@ -81,7 +81,7 @@ pub fn aim_control(character_id: EntityId, world: &World, action: &mut Action) {
                 let path = supercover_path_maker(px as i32, py as i32, (x-1) as i32, y as i32);
 
                 action.insert_aimpath(character_id, path);
-                ActionType::MoveAim(character_id, d);
+                action.insert_aim(character_id, (x - 1, y));
                 break;
             },
             Event::KeyPressed{ key: KeyCode::Right, ctrl: _, shift: _ } => {
@@ -95,7 +95,7 @@ pub fn aim_control(character_id: EntityId, world: &World, action: &mut Action) {
                 
                 let path = supercover_path_maker(px as i32, py as i32, (x+1) as i32, y as i32);
                 action.insert_aimpath(character_id, path);           
-                ActionType::MoveAim(character_id, d);
+                action.insert_aim(character_id, (x + 1, y));
                 break;
                 
             },
@@ -103,7 +103,6 @@ pub fn aim_control(character_id: EntityId, world: &World, action: &mut Action) {
                 let (x, y) = world.get_pointer(character_id)
                         .expect("Attempt to move entity with no position");
                 let path = world.get_aimpath(character_id).unwrap();
-                ActionType::
                 action.remove_aim(character_id);
                 action.remove_aimpath(character_id);
 
@@ -111,7 +110,6 @@ pub fn aim_control(character_id: EntityId, world: &World, action: &mut Action) {
 
             }
             
-
             _ => (),
         }
     }
@@ -133,7 +131,8 @@ pub fn pointer_control(character_id: EntityId, world: &World, action: &mut Actio
                 let (x, y) = world.get_pointer(character_id)
                         .expect("Attempt to move entity with no position");
 
-                ActionType::MovePointer(character_id, d);
+                action.remove_pointer(character_id);
+                action.insert_pointer(character_id, (x, y-1));
                 break;
                 //player.move_by(0, -1, map);
 
@@ -146,7 +145,8 @@ pub fn pointer_control(character_id: EntityId, world: &World, action: &mut Actio
                 let (x, y) = world.get_pointer(character_id)
                         .expect("Attempt to move entity with no position");
 
-                ActionType::MoveCharacter(character_id, d);
+                action.remove_pointer(character_id);
+                action.insert_pointer(character_id, (x, y+1));
                 break;
                 //player.move_by(0, 1, map);
                 //return false;
@@ -159,7 +159,8 @@ pub fn pointer_control(character_id: EntityId, world: &World, action: &mut Actio
                 let (x, y) = world.get_pointer(character_id)
                         .expect("Attempt to move entity with no position");
 
-                ActionType::MovePointer(character_id, d);
+                action.remove_pointer(character_id);
+                action.insert_pointer(character_id, (x - 1, y));
                                 //return false;
                 break;
             },
@@ -170,7 +171,8 @@ pub fn pointer_control(character_id: EntityId, world: &World, action: &mut Actio
                 let (x, y) = world.get_pointer(character_id)
                         .expect("Attempt to move entity with no position");
 
-                ActionType::MovePointer(character_id, d);
+                action.remove_pointer(character_id);
+                action.insert_pointer(character_id, (x + 1, y));
                 break;
                 //player.move_by(1, 0, map);
                 //return false;
@@ -224,7 +226,7 @@ pub fn fire_projectile(character_id: EntityId, world: &World, action: &mut Actio
      action.insert_projectile(projectile_id, ProjectileType::Bullet);
     
      action.insert_material(projectile_id, Materials::Steel);
-     action.insert_aimpath(projectile_id, );
+     //action.insert_aimpath(projectile_id, );
      //action.insert_position(projectile_id, );
 }
 

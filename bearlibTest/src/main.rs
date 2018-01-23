@@ -42,7 +42,7 @@ pub enum Control {
     AI,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum ProjectileType {
     Bullet,
 }
@@ -948,6 +948,7 @@ fn main() {
             aim_path: HashMap::new(),
             solid: sol1, //flag component
             can_open_doors: cod1,
+            projectile: HashMap::new(),
         },
         rules: ruleContainer,
         schedule: TurnSchedule {
@@ -966,6 +967,7 @@ fn main() {
                 aim_path: HashMap::new(),
                 solid: sol2, //flag component
                 can_open_doors: cod2,
+                projectile: HashMap::new(),
             },
             removals: RemovedComponents {
                 position: HashSet::new(),
@@ -978,7 +980,8 @@ fn main() {
                 aim: HashSet::new(),
                 aim_path: HashSet::new(),
                 can_open_doors: HashSet::new(),
-                icon: HashSet::new()
+                icon: HashSet::new(),
+                projectile: HashSet::new(),
             }
         },
         map: SpatialHashTable {
