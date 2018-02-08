@@ -56,12 +56,6 @@ type EntityId = u64;
 //also defines components
 #[derive(Clone)]
 pub struct World {
-    //mask: [i32, ENTITY_COUNT],
-    //location: [location, ENTITY_COUNT],
-    //appearance: [appearance, ENTITY_COUNT],
-    //velocity: [velocity, ENTITY_COUNT],
-    //input: [input, ENTITY_COUNT],
-    //solid: [solid, ENTITY_COUNT],
     position: HashMap<EntityId, (isize, isize)>, //data components
     door_state: HashMap<EntityId, DoorState>,
     tile: HashMap<EntityId, TileType>,
@@ -71,9 +65,12 @@ pub struct World {
     pointer: HashMap<EntityId, (isize, isize)>,
     aim: HashMap<EntityId, (isize, isize)>,
     aim_path: HashMap<EntityId, Vec<Point>>,
+    velocity: HashMap<EntityId, Vec<Direction>>,
     projectile: HashMap<EntityId, ProjectileType>,
+    life_time: HashMap<EntityId, i32>,
     solid: HashSet<EntityId>, //flag component
-    can_open_doors: HashSet<EntityId>,//flag components
+    can_open_doors: HashSet<EntityId>,
+    given_turn: HashSet<EntityId>//flag components
 }
 
 impl World {
@@ -111,8 +108,16 @@ impl World {
         self.aim_path.get(&id).map(|x| x)
     }
 
+    fn get_velocity(&self, id: EntityId) -> Option<&Vec<Direction>> {
+        self.velocity.get(&id).map(|x| x)
+    }
+
     fn get_projectile(&self, id: EntityId) -> Option<ProjectileType> {
         self.projectile.get(&id).map(|x| *x)
+    }
+
+    fn get_life_time(&self, id: EntityId) -> Option<i32> {
+        self.life_time.get(&id).map(|x| *x)
     }
 
     fn contains_solid(&self, id: EntityId) -> bool {
@@ -131,12 +136,24 @@ impl World {
         self.aim.contains_key(&id)
     }
 
+    fn contains_velocity(&self, id: EntityId) -> bool {
+        self.velocity.contains_key(&id)
+    }
+
     fn contains_aimpath(&self, id: EntityId) -> bool {
         self.aim_path.contains_key(&id)
     }
 
     fn contains_projectile(&self, id: EntityId) -> bool {
         self.aim_path.contains_key(&id)
+    }
+
+    fn contains_given_turn(&self, id: EntityId) -> bool {
+        self.given_turn.contains(&id)
+    }
+
+    fn contains_life_time(&self, id: EntityId) -> bool {
+        self.life_time.contains_key(&id)
     }
 
     // pub fn createEntity(&self) -> usize {
@@ -167,7 +184,10 @@ struct RemovedComponents {
     projectile: HashSet<EntityId>,
     solid: HashSet<EntityId>,
     can_open_doors: HashSet<EntityId>,
-    icon: HashSet<EntityId>
+    icon: HashSet<EntityId>,
+    given_turn: HashSet<EntityId>,
+    velocity: HashSet<EntityId>,
+    life_time: HashSet<EntityId>,
 }
 
 #[derive(Clone)]
@@ -214,6 +234,18 @@ impl Action {
         self.removals.projectile.insert(id);
     }
 
+    pub fn remove_given_turn(&mut self, id: EntityId) {
+        self.removals.given_turn.insert(id);
+    }
+
+    pub fn remove_velocity(&mut self, id: EntityId) {
+        self.removals.velocity.insert(id);
+    }
+
+    pub fn remove_life_time(&mut self, id: EntityId) {
+        self.removals.life_time.insert(id);
+    }
+
     //more components
     pub fn insert_position(&mut self, id: EntityId, value: (isize, isize)) {
         self.additions.position.insert(id, value);
@@ -255,9 +287,21 @@ impl Action {
         self.additions.projectile.insert(id, value);
     }
 
+    pub fn insert_velocity(&mut self, id: EntityId, value: Vec<Direction>) {
+        self.additions.velocity.insert(id, value);
+    }
+
     // more components
     pub fn insert_solid(&mut self, id: EntityId) {
         self.additions.solid.insert(id);
+    }
+
+    pub fn insert_given_turn(&mut self, id: EntityId) {
+        self.additions.given_turn.insert(id);
+    }
+
+    pub fn insert_life_time(&mut self, id: EntityId, value: i32) {
+        self.additions.life_time.insert(id, value);
     }
     // more flags
 
@@ -265,7 +309,25 @@ impl Action {
         create_action(action_type, world, self);
     }
 
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self, id: EntityId) {
+        self.removals.position.insert(id);
+        self.removals.door_state.insert(id);
+        self.removals.tile.insert(id);
+        self.removals.control.insert(id);
+        self.removals.material.insert(id);
+        self.removals.solid.insert(id);
+        self.removals.can_open_doors.insert(id);
+        self.removals.icon.insert(id);
+        self.removals.pointer.insert(id);
+        self.removals.aim.insert(id);
+        self.removals.aim_path.insert(id);
+        self.removals.projectile.insert(id);
+        self.removals.given_turn.insert(id);
+        self.removals.velocity.insert(id);
+        self.removals.life_time.insert(id);
+    }
+
+    pub fn clear_all(&mut self) {
         self.additions.position.clear();
         self.additions.door_state.clear();
         self.additions.tile.clear();
@@ -278,6 +340,9 @@ impl Action {
         self.additions.aim.clear();
         self.additions.aim_path.clear();
         self.additions.projectile.clear();
+        self.additions.given_turn.clear();
+        self.additions.velocity.clear();
+        self.additions.life_time.clear();
 
         self.removals.position.clear();
         self.removals.door_state.clear();
@@ -291,6 +356,9 @@ impl Action {
         self.removals.aim.clear();
         self.removals.aim_path.clear();
         self.removals.projectile.clear();
+        self.removals.given_turn.clear();
+        self.removals.velocity.clear();
+        self.removals.life_time.clear();
     }
 }
 
@@ -327,6 +395,18 @@ fn commit_action(world: &mut World, action: &mut Action) {
         world.aim_path.remove(&id);
     }
 
+    for id in action.removals.given_turn.drain() {
+        world.given_turn.remove(&id);
+    }
+
+    for id in action.removals.velocity.drain() {
+        world.velocity.remove(&id);
+    }
+
+    for id in action.removals.life_time.drain() {
+        world.life_time.remove(&id);
+    }
+
     //data insertions
     for (id, value) in action.additions.position.drain() {
         world.position.insert(id, value);
@@ -360,9 +440,21 @@ fn commit_action(world: &mut World, action: &mut Action) {
         world.projectile.insert(id, value);
     }
 
+    for (id, value) in action.additions.velocity.drain() {
+        world.velocity.insert(id, value);
+    }
+
+    for (id, value) in action.additions.life_time.drain() {
+        world.life_time.insert(id, value);
+    }
+
     // flag insertions
     for id in action.additions.solid.drain() {
         world.solid.insert(id);
+    }
+
+    for id in action.additions.given_turn.drain() {
+        world.given_turn.insert(id);
     }
 
     for (id, value) in action.additions.icon.drain() {
@@ -370,7 +462,7 @@ fn commit_action(world: &mut World, action: &mut Action) {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Direction {
     x: isize,
     y: isize,
@@ -399,6 +491,9 @@ pub enum ActionType {
     AIControl(EntityId),
     FireProjectile(EntityId),
     Exit,
+    AddTurn(EntityId),
+    RemoveEntity(EntityId),
+    DecreaseTimeAlive(EntityId),
 }
 
 fn create_action(action_type: ActionType, world: &World, action: &mut Action) {
@@ -443,6 +538,15 @@ fn create_action(action_type: ActionType, world: &World, action: &mut Action) {
         }
         ActionType::Exit => {
             actions::exit_game();
+        }
+        ActionType::AddTurn(entity_id) => {
+            actions::add_turn(entity_id, action);
+        }
+        ActionType::RemoveEntity(entity_id) => {
+            actions::despawn_entity(entity_id, action);
+        }
+        ActionType::DecreaseTimeAlive(entity_id) => {
+            actions::decrease_life_time(entity_id, world, action);
         }
 
     }
@@ -602,15 +706,21 @@ type RuleFn = fn(&Action, &World, &SpatialHashTable, &mut VecDeque<ActionType>) 
 // knows which entity's turn it is
 struct TurnSchedule {
     Turn: VecDeque<EntityId>,
+    Current_Turn: Option<EntityId>
  }
 
 impl TurnSchedule {
     fn next_turn(&mut self) -> Option<EntityId> {
-        self.Turn.pop_front()
+        self.Current_Turn = self.Turn.pop_front();
+        self.Current_Turn
     }
 
     fn insert(&mut self, x: EntityId) {
         self.Turn.push_back(x);
+    }
+
+    fn same_turn(&mut self, x: EntityId) {
+        self.Turn.push_front(x);
     }
 }
 
@@ -623,6 +733,9 @@ struct Game {
 
     // Used to determine whose turn it is
     schedule: TurnSchedule,
+    
+    //Used to determine bonus actions
+    bonus_schedule: TurnSchedule,
 
     // It turns out you only need to have a single action
     // instantiated at a time. Store this as part of the
@@ -710,20 +823,42 @@ fn handle_keys(world: &World, entity_id: EntityId) -> ActionType {
     ActionType::Exit
 }
 
+fn ai_core(world: &World, entity_id: EntityId) -> ActionType {
+        let (x,y) = world.get_position(entity_id)
+                .expect("No position on this entity");
+        let mut d = Direction { x: 1, y: 0 };
+        if x == 10 {        
+            ActionType::MoveCharacter(entity_id, d)
+        } else {
+            d = Direction { x: -1, y: 0 };
+            ActionType::MoveCharacter(entity_id, d)
+        }
+}
+
 fn CHOOSE_ACTION(world: &World, entity_id: EntityId) -> ActionType {
     let controlType = world.get_control(entity_id);
     if controlType == Some(Control::Player) {
         handle_keys(world, entity_id)
     } else {
-        ActionType::AIControl(entity_id)
+        //ActionType::AIControl(entity_id)
+        ai_core(world, entity_id)
     }
 }
 
 impl Game {
     fn game_loop(&mut self) {
         loop {
+            let mut bonus = false;
             // Figure out whose turn it is.
-            let entity_id: EntityId = self.schedule.next_turn().unwrap_or_default();
+            //println!("{:?},{} turn", self.schedule.Turn, self.schedule.Turn.len());
+            let entity_id;
+            //let entity_id: EntityId = self.schedule.next_turn().unwrap_or_default();
+            if self.bonus_schedule.next_turn() != None {
+                entity_id = self.bonus_schedule.Current_Turn.unwrap();
+                bonus = true;
+            } else {
+                entity_id = self.schedule.next_turn().unwrap_or_default();
+            }
             // The current entity decides an action.
             // This waits for player input if it's
             // the player's turn, and invokes the AI
@@ -735,7 +870,7 @@ impl Game {
             terminal::read_event();
 
             let action_type: ActionType = CHOOSE_ACTION(&self.state, entity_id); // need to figure this one out done
-            println!("{:?}", action_type);
+            //println!("{:?}", action_type);
 
             //eat extra inputs
             terminal::read_event();
@@ -751,7 +886,9 @@ impl Game {
 
             // Allow the entity to take another turn
             // at some point in the future.
-            self.schedule.insert(entity_id);
+            if !bonus {
+                 self.schedule.insert(entity_id);
+            }
             //terminal::refresh();
 
             //terminal::has_input();
@@ -764,6 +901,18 @@ impl Game {
         while let Some(action_type) = self.pending_actions.pop_front() {
             // Populate self.action based on the
             // value of action_type.
+            let current_id = self.schedule.Current_Turn.unwrap();
+            //println!("bluh {:?}", &action_type);
+            match &action_type {
+                &ActionType::AddTurn(ref c) => {
+                    
+                    self.bonus_schedule.same_turn(current_id);
+                    println!("turn added");
+                },
+
+                _ => ()
+            }
+
             self.action.instantiate_from(action_type, &self.state); // need to figure this one out
 
             let mut accepted = true;
@@ -818,7 +967,7 @@ impl Game {
             } else {
                 // The action was rejected.
                 // Clear the action
-                self.action.clear();
+                self.action.clear_all();
 
                 // Enqueue all the follow-on actions.
                 for a in self.follow_on_rejected.drain(..) {
@@ -886,10 +1035,13 @@ fn main() {
     type RuleFn = fn(&Action, &World, &SpatialHashTable, &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus);  // can prolly figure this out look at type example online
 
     let mut ruleContainer: Vec<RuleFn> = Vec::new();
+    ruleContainer.push(rules::velocity_move);
+    ruleContainer.push(rules::addTurn);
     ruleContainer.push(rules::aim);
     ruleContainer.push(rules::look);
     ruleContainer.push(rules::bump_open_doors);
     ruleContainer.push(rules::collision);
+    ruleContainer.push(rules::life_time_decay);
 
     let mut pending: VecDeque<ActionType> = VecDeque::new();
     let mut accept: VecDeque<ActionType> = VecDeque::new();
@@ -897,6 +1049,10 @@ fn main() {
     let mut current: VecDeque<ActionType> = VecDeque::new();
 
     let mut turn: VecDeque<EntityId> = VecDeque::new();
+    turn.push_back(0);
+    turn.push_back(4);
+
+    let mut turn1: VecDeque<EntityId> = VecDeque::new();
 
     let mut pos1: HashMap<EntityId, (isize, isize)> = HashMap::new();
     let mut pos2: HashMap<EntityId, (isize, isize)> = HashMap::new();
@@ -917,9 +1073,16 @@ fn main() {
     let mut cod1: HashSet<EntityId> = HashSet::new();
     let mut cod2: HashSet<EntityId> = HashSet::new();
     
+    let mut cturn: Option<EntityId> = Some(0);
+    let mut c1turn: Option<EntityId> = Some(0);
+
     pos1.insert(0, (10,10));
     ico1.insert(0, String::from("@"));
     cont1.insert(0, Control::Player);
+
+    pos1.insert(4, (10,11));
+    ico1.insert(4, String::from("O"));
+    cont1.insert(4, Control::AI);
 
     pos1.insert(1, (5,15));
     ico1.insert(1, String::from("[font=huge][U+2588][/font]"));
@@ -949,10 +1112,18 @@ fn main() {
             solid: sol1, //flag component
             can_open_doors: cod1,
             projectile: HashMap::new(),
+            given_turn: HashSet::new(),
+            velocity: HashMap::new(),
+            life_time: HashMap::new(),
         },
         rules: ruleContainer,
         schedule: TurnSchedule {
-            Turn: turn
+            Turn: turn,
+            Current_Turn: cturn
+        },
+        bonus_schedule: TurnSchedule {
+            Turn: turn1,
+            Current_Turn: c1turn
         },
         action: Action {
             additions: World {
@@ -968,6 +1139,9 @@ fn main() {
                 solid: sol2, //flag component
                 can_open_doors: cod2,
                 projectile: HashMap::new(),
+                given_turn: HashSet::new(),
+                velocity: HashMap::new(),
+                life_time: HashMap::new(),
             },
             removals: RemovedComponents {
                 position: HashSet::new(),
@@ -982,6 +1156,9 @@ fn main() {
                 can_open_doors: HashSet::new(),
                 icon: HashSet::new(),
                 projectile: HashSet::new(),
+                given_turn: HashSet::new(),
+                velocity: HashSet::new(),
+                life_time: HashSet::new(),
             }
         },
         map: SpatialHashTable {

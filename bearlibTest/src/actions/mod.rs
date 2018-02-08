@@ -36,6 +36,7 @@ pub fn aim_control(character_id: EntityId, world: &World, action: &mut Action) {
             Event::KeyPressed{ key: KeyCode::Escape, ctrl: _, shift: _ } => {
                 action.remove_aim(character_id);
                 action.remove_aimpath(character_id);
+                action.insert_given_turn(character_id);
                 break;
             }, // exit game
             Event::KeyPressed{ key: KeyCode::Up, ctrl: _, shift: _ } => {
@@ -100,9 +101,9 @@ pub fn aim_control(character_id: EntityId, world: &World, action: &mut Action) {
                 
             },
             Event::KeyPressed{ key: KeyCode::Enter, ctrl: _, shift: _ } => {
-                let (x, y) = world.get_pointer(character_id)
-                        .expect("Attempt to move entity with no position");
                 let path = world.get_aimpath(character_id).unwrap();
+                
+                fire_projectile(character_id, world, action);
                 action.remove_aim(character_id);
                 action.remove_aimpath(character_id);
 
@@ -122,6 +123,7 @@ pub fn pointer_control(character_id: EntityId, world: &World, action: &mut Actio
         match event {
             Event::KeyPressed{ key: KeyCode::Escape, ctrl: _, shift: _ } => {
                 action.remove_pointer(character_id);
+                action.insert_given_turn(character_id);
                 break;
             }, // exit game
             Event::KeyPressed{ key: KeyCode::Up, ctrl: _, shift: _ } => {
@@ -169,7 +171,7 @@ pub fn pointer_control(character_id: EntityId, world: &World, action: &mut Actio
                 //d.x = 1;
                 //d.y = 0;
                 let (x, y) = world.get_pointer(character_id)
-                        .expect("Attempt to move entity with no position");
+                        .expect("Attempt to pointer control entity with no position");
 
                 action.remove_pointer(character_id);
                 action.insert_pointer(character_id, (x + 1, y));
@@ -190,7 +192,7 @@ pub fn pointer_control(character_id: EntityId, world: &World, action: &mut Actio
 
 pub fn move_pointer(character_id: EntityId, direction: Direction, world: &World, action: &mut Action) {
     let current_position = world.get_pointer(character_id)
-        .expect("Attempt to move entity with no position");
+        .expect("Attempt to pointer entity with no position");
     let (x, y) = current_position;
     let (dx, dy) = direction.unit_vector();
     let new_position = (x+dx, y+dy);
@@ -200,7 +202,7 @@ pub fn move_pointer(character_id: EntityId, direction: Direction, world: &World,
 
 pub fn move_aim(character_id: EntityId, direction: Direction, world: &World, action: &mut Action) {
     let current_position = world.get_pointer(character_id)
-        .expect("Attempt to move entity with no position");
+        .expect("Attempt to move aim with no position");
     let (x, y) = current_position;
     let (dx, dy) = direction.unit_vector();
     let new_position = (x+dx, y+dy);
@@ -221,11 +223,39 @@ pub fn move_character(character_id: EntityId, direction: Direction, world: &Worl
 }
 
 pub fn fire_projectile(character_id: EntityId, world: &World, action: &mut Action) {
-     let projectile_id = spawn_entity(world);
-     action.insert_icon(projectile_id, String::from("*"));
-     action.insert_projectile(projectile_id, ProjectileType::Bullet);
+    let projectile_id = spawn_entity(world);
+    let mut path: &Vec<Point> = &Vec::new();
+    for key in world.aim_path.keys() {
+        path = world.get_aimpath(*key).unwrap();
+        let (x, y) = world.get_position(*key)
+                .expect("Attempt to get entity with no position");
+        action.insert_position(projectile_id, (x,y));
+    }
     
-     action.insert_material(projectile_id, Materials::Steel);
+    let mut conv_path: Vec<Direction> = Vec::new();
+    let mut conv = path.to_vec();
+    for index in 0..conv.len() {
+        if index + 1 >= conv.len() {
+            break;
+        } else {
+            let mut workingC = conv[index];
+            let mut workingF = conv[index + 1];
+
+            let mut resultsX = workingF.x - workingC.x;
+            let mut resultsY = workingF.y - workingC.y;
+
+            let mut dir = Direction { x: resultsX as isize, y: resultsY as isize};
+            conv_path.push(dir);
+        }
+    } 
+
+    action.insert_life_time(projectile_id, conv.len() as i32);
+    action.insert_velocity(projectile_id, conv_path);
+    action.insert_aimpath(projectile_id, path.to_vec());
+    action.insert_icon(projectile_id, String::from("*"));
+    action.insert_projectile(projectile_id, ProjectileType::Bullet);
+    
+    action.insert_material(projectile_id, Materials::Steel);
      //action.insert_aimpath(projectile_id, );
      //action.insert_position(projectile_id, );
 }
@@ -250,6 +280,10 @@ pub fn ai_control(player_id: EntityId, action: &mut Action) {
     action.insert_control(player_id, Control::AI);
 }
 
+pub fn add_turn(player_id: EntityId, action: &mut Action) {
+    action.remove_given_turn(player_id);
+}
+
 pub fn exit_game() {
     terminal::close();
 }
@@ -260,12 +294,22 @@ pub fn spawn_entity(world: &World) -> EntityId {
     return keyNum as u64;
 }
 
+pub fn despawn_entity(character_id: EntityId, action: &mut Action) {
+    action.clear(character_id);
+}
+
+pub fn decrease_life_time(character_id: EntityId, world: &World, action: &mut Action) {
+    let time = world.get_life_time(character_id).unwrap() - 1;
+    action.remove_life_time(character_id);
+    action.insert_life_time(character_id, time);
+}
+
 // helper functions
 fn supercover_path_maker(startx: i32, starty: i32, endx: i32, endy: i32) -> Vec<Point> {
     let mut path: Vec<Point> = vec![];
-    println!("Start: {},{}  $$  End: {},{}", startx, starty, endx, endy);
+    //println!("Start: {},{}  $$  End: {},{}", startx, starty, endx, endy);
     for point in pathing::supercover::Supercover::new(Point::new(startx, starty), Point::new(endx, endy)) {
-        println!("{:?}", point);
+        //println!("{:?}", point);
         path.push(Point::new(point.x, point.y));
     }
     path
