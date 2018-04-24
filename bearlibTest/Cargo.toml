@@ -9,6 +9,5 @@ serde = "*"
 serde_derive = "*"
 serde_json = "*"
 num-traits = "*"
-hex = "*"
 flate2 = { version = "1.0.1", features = ["zlib"], default-features = false }
 byteorder = "*"

@@ -15,8 +15,18 @@
 # Used primarily internally to parse the data, feel free to reference them externally if it's useful. 
 # Changing these programattically will, of course, screw up the parsing (unless the format changes and you're using an old copy of this file)
 ##################################*/
-extern crate hex;
 use std::cmp;
+use std::io::prelude::*;
+use flate2::Compression;
+use flate2::write::GzEncoder;
+use flate2::read::GzDecoder;
+use std::env;
+use std::fs::File;
+use std::io;
+use std::path::Path;
+use std::io::{Read, Cursor, SeekFrom};
+use byteorder::{ReadBytesExt, ByteOrder, LittleEndian};
+
 
 
 const version_bytes: usize = 4;
@@ -39,174 +49,176 @@ const transparent_cell_back_r: usize = 255;
 const transparent_cell_back_g: usize = 0;
 const transparent_cell_back_b: usize = 255;
 
-
+#[derive(Debug)]
 pub struct xpString {
-	version: i16,
-	layer_count: i16,
-	width: i16,
-	height: i16,
+	version: i32,
+	layer_count: i32,
+	width: i32,
+	height: i32,
 	layer_data: Vec<parseLay>
 }
 
-pub fn load_xp_string(file_string: String, reverse_endian: bool) -> xpString {
+pub fn load_xp_string(file_string: Vec<u8>) -> xpString {
+    let ref_file_string = &file_string;
+	let read_stream = &file_string[..].to_vec();
 
+	let mut rdr = Cursor::new(read_stream);
 	let mut offset: usize = 0;
 
-	let mut version = String::from(&file_string[offset..(offset + version_bytes)]);
+	rdr.seek(SeekFrom::Start(offset as u64));
+
+	let mut version = rdr.read_i32::<LittleEndian>().unwrap();
 	println!("{}", version);
 	offset = offset + version_bytes;
-	let mut layer_count = String::from(&file_string[offset..(offset + layer_count_bytes)]);
+	
+	rdr.seek(SeekFrom::Start(offset as u64));
+
+	let mut layer_count = rdr.read_i32::<LittleEndian>().unwrap();
 	offset = offset + layer_count_bytes;
 
-	if reverse_endian {
-		version = version.chars().rev().collect::<String>(); //this reverses version
-		layer_count = layer_count.chars().rev().collect::<String>();
-    }
+	rdr.seek(SeekFrom::Start(offset as u64));
 
-//	# hex-encodes the numbers then converts them to an int
-	let vers = hex::encode(version).parse::<i16>().unwrap();
-	let layercount = hex::encode(layer_count).parse::<i16>().unwrap();
 
 	let mut layers = Vec::new();
 
 	let mut current_largest_width = 0;
 	let mut current_largest_height = 0;
 
-	for layer in 0..layercount	{
+	for layer in 0..layer_count	{
 		//#slight lookahead to figure out how much data to feed load_layer
+		let mut this_layer_width = rdr.read_i32::<LittleEndian>().unwrap();
+		offset = offset + layer_width_bytes;
+		rdr.seek(SeekFrom::Start(offset as u64));
+		let mut this_layer_height = rdr.read_i32::<LittleEndian>().unwrap();
+		offset += layer_height_bytes;
+		rdr.seek(SeekFrom::Start(offset as u64));
 
-		let mut this_layer_width = String::from(&file_string[offset..(offset + layer_width_bytes)]); //
-		let mut this_layer_height = String::from(&file_string[(offset + layer_width_bytes)..(offset + layer_width_bytes + layer_height_bytes)]);
+		current_largest_width = cmp::max(current_largest_width, this_layer_width);
+		current_largest_height = cmp::max(current_largest_height, this_layer_height);
 
-		if reverse_endian {
-			this_layer_width = this_layer_width.chars().rev().collect::<String>();
-			this_layer_height = this_layer_height.chars().rev().collect::<String>();
-		}
-
-		let this_layerwidth = hex::encode(this_layer_width).parse::<i16>().unwrap();
-		let this_layerheight = hex::encode(this_layer_height).parse::<i16>().unwrap();
-
-		current_largest_width = cmp::max(current_largest_width, this_layerwidth);
-		current_largest_height = cmp::max(current_largest_height, this_layerheight);
-
-		let layer_data_size = layer_width_bytes + layer_height_bytes + (layer_cell_bytes * this_layerwidth as usize * this_layerheight as usize);
-
-		let layer_data_raw = String::from(&file_string[offset..(offset + layer_data_size)]);
-		let layer_data = parse_layer(String::from(&file_string[offset..(offset + layer_data_size)]), reverse_endian);
+		let layer_data_size = layer_width_bytes + layer_height_bytes + (layer_cell_bytes * (this_layer_width as usize) * (this_layer_height as usize));
+		offset -= (layer_height_bytes+layer_width_bytes);
+		let layer_data_raw = &ref_file_string[offset..(offset + layer_data_size)];
+		
+		let layer_data = parse_layer(layer_data_raw.to_vec());
 		layers.push(layer_data);
 
 		offset = offset + layer_data_size;
+		rdr.seek(SeekFrom::Start(offset as u64));
+
 	}
 
 	xpString {
-		version: vers,
-		layer_count: layercount,
-		width: current_largest_width,
-		height: current_largest_height,
+		version: version as i32,
+		layer_count: layer_count as i32,
+		width: current_largest_width as i32,
+		height: current_largest_height as i32,
 		layer_data: layers
 	}
-// 	return {
-// 		'version':version,
-// 		'layer_count':layer_count,
-// 		'width':current_largest_width,
-// 		'height':current_largest_height,
-// 		'layer_data':layers
-// 	}
 }
 /*##################################
 # Takes a single layer's data and returns the format listed at the top of the file for a single layer.
 ##################################*/
+#[derive(Debug)]
 pub struct parseLay {
-	width: i16,
-	height: i16,
+	width: i32,
+	height: i32,
 	cells: Vec<Vec<indiCell>>
 }
 
 
-pub fn parse_layer(layer_string: String, reverse_endian: bool) -> parseLay {
-	let mut offset: usize = 0;
+pub fn parse_layer(layer_string: Vec<u8>) -> parseLay {
+ 	let ref_layer_string = &layer_string;
+	let read_stream = &layer_string[..].to_vec();
 
-	let mut width = String::from(&layer_string[offset..(offset + layer_width_bytes)]);
+	let mut offset: usize = 0;
+	let mut rdr = Cursor::new(read_stream);
+
+	let mut width = rdr.read_i32::<LittleEndian>().unwrap();
 	offset = offset + layer_width_bytes;
-	let mut height = String::from(&layer_string[offset..(offset + layer_height_bytes)]);
+	rdr.seek(SeekFrom::Start(offset as u64));
+
+	let mut height = rdr.read_i32::<LittleEndian>().unwrap();
 	offset = offset + layer_height_bytes;
 
-	if reverse_endian {
-		width = width.chars().rev().collect::<String>();
-		height = height.chars().rev().collect::<String>();
-	}
 
-	let widthI = hex::encode(width).parse::<i16>().unwrap();
-	let heightI = hex::encode(height).parse::<i16>().unwrap();
+	rdr.seek(SeekFrom::Start(offset as u64));
+
+
 
 	let mut cells = Vec::new();
-	for x in 0..widthI {
+	for x in 0..width {
 		let mut row = Vec::new();
 
-		for y in 0..heightI {
-			let cell_data_raw = String::from(&layer_string[offset..(offset + layer_cell_bytes)]);
-			let cell_data = parse_individual_cell(cell_data_raw, reverse_endian);
+		for y in 0..height {
+			let cell_data_raw = &ref_layer_string[offset..(offset + layer_cell_bytes)];
+			let cell_data = parse_individual_cell(cell_data_raw.to_vec());
 			row.push(cell_data);
 			offset = offset + layer_cell_bytes;
+			rdr.seek(SeekFrom::Start(offset as u64));
+
 		}
 
 		cells.push(row);
 	}
 
 	parseLay {
-		width: widthI,
-		height: heightI,
+		width: width as i32,
+		height: height as i32,
 		cells: cells
 	}
 
-// 	return {
-// 		'width':width,
-// 		'height':height,
-// 		'cells':cells
-// 	}
 }
 
 /*##################################
 # Pulls out the keycode and the foreground/background RGB values from a single cell's data, returning them in the format listed at the top of this file for a single cell.
 ##################################*/
-
+#[derive(Debug)]
 pub struct indiCell {
-	keycode: i16,
-	fore_r: i16,
-	fore_g: i16,
-	fore_b: i16,
-	back_r: i16,
-	back_g: i16,
-	back_b: i16
+	keycode: i32,
+	fore_r: u8,
+	fore_g: u8,
+	fore_b: u8,
+	back_r: u8,
+	back_g: u8,
+	back_b: u8
 }
 
-pub fn parse_individual_cell(cell_string: String, reverse_endian: bool) -> indiCell {
+pub fn parse_individual_cell(cell_string: Vec<u8>) -> indiCell {
 	let mut offset = 0;
+	let mut rdr = Cursor::new(cell_string);
 
-	let mut keycode = String::from(&cell_string[offset..(offset + layer_keycode_bytes)]);
-	if reverse_endian {
-		keycode = keycode.chars().rev().collect::<String>();
-	}
+	let mut keycode = rdr.read_i32::<LittleEndian>().unwrap(); 
 
-	let _keycode = hex::encode(keycode).parse::<i16>().unwrap();
 	offset = offset + layer_keycode_bytes;
+	rdr.seek(SeekFrom::Start(offset as u64));
 
-	let fore_r = hex::encode(&cell_string[offset..(offset+1)]).parse::<i16>().unwrap();
+	let fore_r = rdr.read_u8().unwrap();
 	offset += 1;
-	let fore_g = hex::encode(&cell_string[offset..(offset+1)]).parse::<i16>().unwrap();
-	offset += 1;
-	let fore_b = hex::encode(&cell_string[offset..(offset+1)]).parse::<i16>().unwrap();
-	offset += 1;
+	rdr.seek(SeekFrom::Start(offset as u64));
 
-	let back_r = hex::encode(&cell_string[offset..(offset+1)]).parse::<i16>().unwrap();
+	let fore_g = rdr.read_u8().unwrap();
 	offset += 1;
-	let back_g = hex::encode(&cell_string[offset..(offset+1)]).parse::<i16>().unwrap();
+	rdr.seek(SeekFrom::Start(offset as u64));
+
+	let fore_b = rdr.read_u8().unwrap();
 	offset += 1;
-	let back_b = hex::encode(&cell_string[offset..(offset+1)]).parse::<i16>().unwrap();
+	rdr.seek(SeekFrom::Start(offset as u64));
+
+	let back_r = rdr.read_u8().unwrap();
 	offset += 1;
+	rdr.seek(SeekFrom::Start(offset as u64));
+	
+	let back_g = rdr.read_u8().unwrap();
+	offset += 1;
+	rdr.seek(SeekFrom::Start(offset as u64));
+
+	let back_b = rdr.read_u8().unwrap();
+	offset += 1;
+	rdr.seek(SeekFrom::Start(offset as u64));
 
 	indiCell {
-		keycode: _keycode,
+		keycode: keycode as i32,
 		fore_r: fore_r,
 		fore_g: fore_g,
 		fore_b: fore_b,
@@ -214,13 +226,18 @@ pub fn parse_individual_cell(cell_string: String, reverse_endian: bool) -> indiC
 		back_g: back_g,
 		back_b: back_b
 	}
-// 	return {
-// 		'keycode':keycode,
-// 		'fore_r':fore_r,
-// 		'fore_g':fore_g,
-// 		'fore_b':fore_b,
-// 		'back_r':back_r,
-// 		'back_g':back_g,
-// 		'back_b':back_b,
-// 	}
+}
+
+pub fn file_decompress(filepath: String) -> Vec<u8> {
+	let path = Path::new(&filepath);
+
+    let mut file = File::open(&path).expect("Unable to open file");
+
+    let mut bytes = Vec::new(); 
+    file.read_to_end(&mut bytes);
+    let mut gz = GzDecoder::new(&bytes[..]);
+
+    let mut gz_bytes = Vec::new();
+    gz.read_to_end(&mut gz_bytes);
+	gz_bytes
 }
