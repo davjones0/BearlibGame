@@ -6,6 +6,71 @@ use std::collections::VecDeque;
 use World;
 use SpatialHashTable;
 use Action;
+use Direction;
+use bear_lib_terminal::terminal::{self, config, Event, KeyCode};
+use Game_State;
+
+// pub fn MenuToggle(action: &Action, world: &World, spatial_hash: &SpatialHashTable, reactions: &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus) {
+//     let future_state = EntityStoreAfterAction {
+//         entity_store: world,
+//         action: action,
+//     };
+
+//     //for (id, position) in action.additions.pointer.iter() {
+//     //    reactions.push_front(ActionType::PointerControl(*id));
+//    //}
+
+//     match future_state.get_game_state(0) {
+//         Some(Game_State::StatusMenu) => {
+//             reactions.push_front(ActionType::StatusControl);
+//             return (ActionStatus::Accept, RuleStatus::StopChecking);
+//         },
+//         Some(Game_State::GameOn) => return (ActionStatus::Accept, RuleStatus::KeepChecking),
+//     }
+
+//     // no doors were bumped, so check other rules
+    
+
+// }
+
+
+pub fn velocity_move(action: &Action, world: &World, spatial_hash: &SpatialHashTable, reactions: &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus) {
+
+     
+     let future_state = EntityStoreAfterAction {
+        entity_store: world,
+        action: action,
+    };
+
+    for (id, pos) in action.additions.velocity.iter() {
+        //println!("debug {}, {:?}", id, pos);
+        for dir in pos.iter() {
+            let d = Direction { x: dir.x, y: dir.y};
+            println!("velocity: {:?}, id: {}", d, id);
+            terminal::delay(1000/20);
+            terminal::refresh();
+
+            reactions.push_front(ActionType::MoveCharacter(*id,d));
+        }
+    }
+
+    // no doors were bumped, so check other rules
+    return (ActionStatus::Accept, RuleStatus::KeepChecking);
+}
+
+pub fn addTurn(action: &Action, world: &World, spatial_hash: &SpatialHashTable, reactions: &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus) {
+    let future_state = EntityStoreAfterAction {
+        entity_store: world,
+        action: action,
+    };
+
+    for id in action.additions.given_turn.iter() {
+        reactions.push_front(ActionType::AddTurn(*id));
+    }
+
+    // no doors were bumped, so check other rules
+    return (ActionStatus::Accept, RuleStatus::KeepChecking);
+}
 
 pub fn aim(action: &Action, world: &World, spatial_hash: &SpatialHashTable, reactions: &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus) {
     let future_state = EntityStoreAfterAction {
@@ -29,11 +94,6 @@ pub fn look(action: &Action, world: &World, spatial_hash: &SpatialHashTable, rea
 
     for (id, position) in action.additions.pointer.iter() {
         reactions.push_front(ActionType::PointerControl(*id));
-        // only proceed if this entity can actually open doors
-        // if !future_state.contains_can_open_doors(&id) {  //add that contains to world
-        //     continue;
-        // }    for event in terminal::events() {
-      
     }
 
     // no doors were bumped, so check other rules
@@ -91,3 +151,48 @@ pub fn collision(action: &Action, state: &World, spatial_hash: &SpatialHashTable
 
     return (ActionStatus::Accept, RuleStatus::KeepChecking);
 }
+
+pub fn life_time_decay(action: &Action, state: &World, spatial_hash: &SpatialHashTable, reactions: &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus) {
+    //println!("hit2");
+    let future_state = EntityStoreAfterAction {
+        entity_store: state,
+        action: action,
+    };
+
+    for (id, time) in action.additions.life_time.iter() {
+        terminal::refresh();
+
+        println!("hitting decay: {}", time);
+        if *time == 0 {
+            reactions.push_front(ActionType::RemoveEntity(*id));
+        } else {
+            reactions.push_front(ActionType::DecreaseTimeAlive(*id));
+        }
+        //println!("{}..{:?}",spatial_hash.get(position).is_solid(), position);
+        
+    }
+
+    return (ActionStatus::Accept, RuleStatus::KeepChecking);
+}
+
+
+
+// pub fn projectile_impact(action: &Action, state: &World, spatial_hash: &SpatialHashTable, reactions: &mut VecDeque<ActionType>) -> (ActionStatus, RuleStatus) {
+//     //println!("hit2");
+//     let future_state = EntityStoreAfterAction {
+//         entity_store: state,
+//         action: action,
+//     };
+
+//     for (id, position) in action.additions.position.iter() {
+//         if !future_state.contains_solid(&id) {
+//             continue;
+//         }
+//         //println!("{}..{:?}",spatial_hash.get(position).is_solid(), position);
+//         if spatial_hash.get(position).is_solid() {
+//             return (ActionStatus::Reject, RuleStatus::StopChecking);
+//         }
+//     }
+
+//     return (ActionStatus::Accept, RuleStatus::KeepChecking);
+// }

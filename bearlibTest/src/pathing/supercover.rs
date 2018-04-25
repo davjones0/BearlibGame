@@ -16,9 +16,9 @@ pub struct Supercover {
 impl Supercover {
     pub fn new(start: Point, end: Point) -> Self {
         let (dx, dy) = (end.x - start.x, end.y - start.y);
-        println!("-----------------------");
-        println!("start Point: {:?}, end Point: {:?}", start, end);
-        println!("dx: {}, dy: {}", dx, dy);
+        //println!("-----------------------");
+        //println!("start Point: {:?}, end Point: {:?}", start, end);
+        //println!("dx: {}, dy: {}", dx, dy);
         Self {
             point: start,
             ix: 0.0,
@@ -36,12 +36,12 @@ impl Iterator for Supercover {
     type Item = Point;
 
     fn next(&mut self) -> Option<(Point)> {
-        println!("ix:{} <= nx:{} && iy: {} <= ny: {}", self.ix, self.nx, self.iy, self.ny);
+        //println!("ix:{} <= nx:{} && iy: {} <= ny: {}", self.ix, self.nx, self.iy, self.ny);
         if self.ix <= self.nx && self.iy <= self.ny {
             let point = self.point;
-            println!("{} and {}", point.x, point.y);
+            //println!("{} and {}", point.x, point.y);
             let comparison = ((0.5 + self.ix) / self.nx) - ((0.5 + self.iy) / self.ny);
-            println!("comparison: {}", comparison);
+            //println!("comparison: {}", comparison);
             // If the comparison is equal then jump diagonally
             if comparison == 0.0 {
                 self.point.x += self.sign_x;
@@ -91,7 +91,7 @@ fn supercover_tests() {
 
     assert_eq!(
         supercover(Point::new(12, 10), Point::new(12, 11)),
-        [Point::new(12, 10), Point::new(12, 11), Point::new()]
+        [Point::new(12, 10), Point::new(12, 11)]
     );
 }
 
